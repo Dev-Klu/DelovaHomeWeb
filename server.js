@@ -2456,6 +2456,25 @@ app.get('/api/system/info', (req, res) => {
     });
 });
 
+app.get('/api/system/health', requireAuth, async (req, res) => {
+    const os = require('os');
+    let disk = null;
+    try {
+        const stats = await fs.promises.statfs(__dirname);
+        disk = { total: stats.blocks * stats.bsize, free: stats.bavail * stats.bsize };
+    } catch (error) {
+        console.error('[System] Disk status unavailable:', error.message);
+    }
+    res.json({
+        uptime: os.uptime(),
+        processUptime: process.uptime(),
+        memory: { total: os.totalmem(), free: os.freemem() },
+        load: os.loadavg(),
+        platform: `${os.platform()} ${os.release()}`,
+        disk
+    });
+});
+
 app.get('/api/system/check-update', (req, res) => {
     // 1. Check Git
     exec('git fetch && git status -uno', (err, stdoutGit, stderrGit) => {

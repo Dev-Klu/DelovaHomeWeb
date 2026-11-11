@@ -8,14 +8,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function loadNasList() {
         fetch('/api/nas')
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
             .then(list => {
                 const container = document.createElement('div');
+                if (!Array.isArray(list)) throw new Error('Ongeldig antwoord van de server');
+                if (!list.length) {
+                    container.textContent = 'Nog geen NAS gekoppeld. Gebruik NAS verbinden om een SMB-bron toe te voegen.';
+                }
                 list.forEach(nas => {
                     const item = document.createElement('div');
                     item.className = 'nas-item';
-                    item.innerHTML = `<i class="fas fa-server"></i> ${nas.name}`;
-                    item.onclick = () => selectNas(nas.id, nas.name);
+                    item.innerHTML = `<i class="fas fa-server"></i> ${HL.esc(nas.name)}`;
+                    item.onclick = () => selectNas(nas.id, item);
                     container.appendChild(item);
                 });
                 // Keep header
@@ -23,10 +30,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 nasListEl.innerHTML = '';
                 nasListEl.appendChild(header);
                 nasListEl.appendChild(container);
+            })
+            .catch(error => {
+                fileListEl.textContent = `NAS-bronnen laden mislukt: ${error.message}`;
             });
     }
 
-    function selectNas(id, name) {
+    function selectNas(id, selectedItem) {
         currentNasId = id;
         currentPath = '';
         updateBreadcrumb();
@@ -34,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Update active state
         document.querySelectorAll('.nas-item').forEach(el => el.classList.remove('active'));
-        // (Need to track element to add active class, simplified for now)
+        selectedItem.classList.add('active');
     }
 
     function loadFiles() {
@@ -51,11 +61,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!Array.isArray(files)) {
                     throw new Error('Ongeldig antwoord van server');
                 }
-                if (files.length === 0) {
-                    fileListEl.innerHTML = '<div style="padding:20px">Lege map</div>';
-                    return;
-                }
-                
                 // Add ".." if not root
                 if (currentPath) {
                     const upItem = document.createElement('div');
@@ -63,6 +68,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     upItem.innerHTML = `<div class="file-icon"><i class="fas fa-level-up-alt"></i></div><div class="file-name">..</div>`;
                     upItem.onclick = () => goUp();
                     fileListEl.appendChild(upItem);
+                }
+                if (files.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.textContent = 'Lege map';
+                    fileListEl.appendChild(empty);
+                    return;
                 }
 
                 files.forEach(file => {
@@ -90,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
 
-                    item.innerHTML = `<div class="file-icon"><i class="fas ${icon}" style="color:${color}"></i></div><div class="file-name">${file.name}</div>`;
+                    item.innerHTML = `<div class="file-icon"><i class="fas ${icon}" style="color:${color}"></i></div><div class="file-name">${HL.esc(file.name)}</div>`;
                     
                     if (file.isDirectory) {
                         item.onclick = () => enterFolder(file.name);
@@ -101,7 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             })
             .catch(err => {
-                fileListEl.innerHTML = `<div style="color:red; padding:20px">Fout: ${err.message}</div>`;
+                fileListEl.textContent = `Fout: ${err.message}`;
             });
     }
 
@@ -239,7 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // So we use a global function or data attributes.
             // Let's use data attributes and event delegation or just simple onclick with index.
             // Actually, we can just rebuild path from index.
-            html += ` / <span onclick="jumpToPath('${i}')">${p}</span>`;
+            html += ` / <span onclick="jumpToPath('${i}')">${HL.esc(p)}</span>`;
         });
         breadcrumbEl.innerHTML = html;
     }

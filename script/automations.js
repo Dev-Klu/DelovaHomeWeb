@@ -30,7 +30,7 @@ async function loadDevices() {
         // Populate device dropdowns
         const stateDevice = document.getElementById('stateDevice');
         if (stateDevice) {
-            stateDevice.innerHTML = devices.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+            stateDevice.innerHTML = devices.map(d => `<option value="${HL.esc(d.id)}">${HL.esc(d.name)}</option>`).join('');
         }
         
         // Re-render actions if modal is open to update dropdowns
@@ -47,7 +47,9 @@ async function loadAutomations() {
     const list = document.getElementById('automations-list');
     try {
         const res = await fetch('/api/automations');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         automations = await res.json();
+        if (!Array.isArray(automations)) throw new Error('Ongeldig antwoord van de server');
         
         if (automations.length === 0) {
             list.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">Geen automatiseringen gevonden. Maak er een aan!</div>';
@@ -57,17 +59,18 @@ async function loadAutomations() {
         list.innerHTML = automations.map(a => `
             <div class="automation-card">
                 <div class="automation-info">
-                    <h3>${a.name}</h3>
-                    <div class="automation-desc">${getTriggerDescription(a.trigger)} &rarr; ${a.actions.length} Actie(s)</div>
+                    <h3>${HL.esc(a.name)}</h3>
+                    <div class="automation-desc">${HL.esc(getTriggerDescription(a.trigger || {}))} &rarr; ${(a.actions || []).length} actie(s) · ${a.trigger?.type === 'weather' ? 'Weertrigger wordt nog niet uitgevoerd' : a.enabled ? 'Actief' : 'Uitgeschakeld'}</div>
                 </div>
                 <div class="automation-actions">
-                    <button class="btn-icon" onclick="editAutomation('${a.id}')" title="Bewerken"><i class="fas fa-edit"></i></button>
-                    <button class="btn-icon" onclick="deleteAutomation('${a.id}')" title="Verwijderen" style="color: var(--danger);"><i class="fas fa-trash"></i></button>
+                    <button class="btn-secondary" data-automation-action="toggle" data-id="${HL.esc(a.id)}">${a.enabled ? 'Pauzeren' : 'Inschakelen'}</button>
+                    <button class="btn-icon" data-automation-action="edit" data-id="${HL.esc(a.id)}" title="Bewerken" aria-label="Bewerken"><i class="fas fa-edit"></i></button>
+                    <button class="btn-icon" data-automation-action="delete" data-id="${HL.esc(a.id)}" title="Verwijderen" aria-label="Verwijderen"><i class="fas fa-trash"></i></button>
                 </div>
             </div>
         `).join('');
     } catch (e) {
-        list.innerHTML = `<div style="color: red; text-align: center;">Fout bij laden: ${e.message}</div>`;
+        list.textContent = `Fout bij laden: ${e.message}`;
     }
 }
 
@@ -102,6 +105,26 @@ function getTriggerDescription(t) {
 // --- Helper Logic for New UI ---
 
 document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('automations-list').addEventListener('click', async event => {
+        const button = event.target.closest('[data-automation-action]');
+        if (!button) return;
+        const automation = automations.find(item => String(item.id) === button.dataset.id);
+        if (!automation) return;
+        if (button.dataset.automationAction === 'edit') return editAutomation(automation.id);
+        if (button.dataset.automationAction === 'delete') return deleteAutomation(automation.id);
+        button.disabled = true;
+        try {
+            const response = await fetch(`/api/automations/${encodeURIComponent(automation.id)}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: !automation.enabled })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            await loadAutomations();
+        } catch (error) {
+            alert(`Automatisering wijzigen mislukt: ${error.message}`);
+            button.disabled = false;
+        }
+    });
     // Weather condition change
     const weatherCond = document.getElementById('weatherCondition');
     if (weatherCond) {
@@ -283,7 +306,8 @@ window.deleteAutomation = async (id) => {
     if (!confirm(window.t ? window.t('confirm_delete_automation') : 'Are you sure you want to delete this automation?')) return;
     
     try {
-        await fetch(`/api/automations/${id}`, { method: 'DELETE' });
+        const response = await fetch(`/api/automations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         loadAutomations();
     } catch (e) {
         alert((window.t ? window.t('delete_failed') : 'Failed to delete: ') + e.message);
@@ -325,7 +349,7 @@ function renderActions() {
     
     container.innerHTML = currentActions.map((action, index) => {
         if (action.type === 'device') {
-            const deviceOptions = devices.map(d => `<option value="${d.id}" ${d.id === action.deviceId ? 'selected' : ''}>${d.name}</option>`).join('');
+            const deviceOptions = devices.map(d => `<option value="${HL.esc(d.id)}" ${d.id === action.deviceId ? 'selected' : ''}>${HL.esc(d.name)}</option>`).join('');
             return `
                 <div class="action-item">
                     <div style="flex: 1; display: flex; gap: 10px; flex-wrap: wrap;">
@@ -339,7 +363,7 @@ function renderActions() {
                             <option value="play" ${action.command === 'play' ? 'selected' : ''}>Afspelen</option>
                             <option value="pause" ${action.command === 'pause' ? 'selected' : ''}>Pauzeren</option>
                         </select>
-                        <input type="text" placeholder="Waarde (opt)" value="${action.value || ''}" onchange="updateAction(${index}, 'value', this.value)" style="width: 80px;">
+                        <input type="text" placeholder="Waarde (opt)" value="${HL.esc(action.value ?? '')}" onchange="updateAction(${index}, 'value', this.value)" style="width: 80px;">
                     </div>
                     <button type="button" onclick="removeAction(${index})" style="color: var(--danger); background: none; border: none; cursor: pointer; margin-left: 10px;">
                         <i class="fas fa-times"></i>
@@ -373,6 +397,10 @@ window.saveAutomation = async () => {
     const id = document.getElementById('automationId').value;
     const name = document.getElementById('autoName').value;
     const triggerType = document.getElementById('triggerType').value;
+    if (!name.trim()) return alert('Geef de automatisering een naam.');
+    if (!currentActions.length) return alert('Voeg minstens één actie toe.');
+    if (currentActions.some(action => action.type === 'device' && !action.deviceId)) return alert('Selecteer een apparaat voor elke apparaatactie.');
+    if (triggerType === 'weather') return alert('Weertriggers worden nog niet uitgevoerd. Kies een andere trigger.');
     
     let trigger = { type: triggerType };
     
@@ -414,7 +442,7 @@ window.saveAutomation = async () => {
     const payload = {
         id: id || undefined,
         name,
-        enabled: true,
+        enabled: id ? automations.find(a => String(a.id) === id)?.enabled !== false : true,
         trigger,
         actions: sanitizedActions
     };

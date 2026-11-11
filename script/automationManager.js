@@ -52,11 +52,26 @@ class AutomationManager extends EventEmitter {
         }
     }
 
-    save() {
+    save(automations = this.automations) {
+        const temporaryFile = `${DATA_FILE}.${process.pid}.tmp`;
         try {
-            fs.writeFileSync(DATA_FILE, JSON.stringify(this.automations, null, 2));
+            fs.writeFileSync(temporaryFile, JSON.stringify(automations, null, 2));
+            fs.renameSync(temporaryFile, DATA_FILE);
         } catch (e) {
             console.error('[Automation] Failed to save automations:', e);
+            try {
+                if (fs.existsSync(temporaryFile)) fs.unlinkSync(temporaryFile);
+            } catch (cleanupError) {
+                console.error('[Automation] Failed to remove temporary file:', cleanupError);
+            }
+            throw e;
+        }
+    }
+
+    validateAutomation(automation) {
+        if (!automation.trigger || !automation.trigger.type) throw new Error('Een trigger is verplicht');
+        if (automation.trigger.type === 'time' && !cron.validate(automation.trigger.cron || '')) {
+            throw new Error('Ongeldige cron-expressie');
         }
     }
 
@@ -86,11 +101,17 @@ class AutomationManager extends EventEmitter {
 
     addAutomation(automation) {
         if (!automation.id) automation.id = Date.now().toString();
-        if (!automation.enabled) automation.enabled = true;
-        
+        if (this.automations.some(existing => existing.id === automation.id)) throw new Error('Automation ID already exists');
+        if (automation.enabled === undefined) automation.enabled = true;
+        this.validateAutomation(automation);
+        this.registerAutomation(automation, true);
+        try {
+            this.save([...this.automations, automation]);
+        } catch (error) {
+            this.unregisterAutomation(automation.id);
+            throw error;
+        }
         this.automations.push(automation);
-        this.registerAutomation(automation);
-        this.save();
         return automation;
     }
 
@@ -98,29 +119,36 @@ class AutomationManager extends EventEmitter {
         const index = this.automations.findIndex(a => a.id === id);
         if (index === -1) throw new Error('Automation not found');
         
-        const updated = { ...this.automations[index], ...updates };
-        this.automations[index] = updated;
-        
-        // Re-register
+        const previous = this.automations[index];
+        const updated = { ...previous, ...updates, id: previous.id };
+        this.validateAutomation(updated);
         this.unregisterAutomation(id);
-        this.registerAutomation(updated);
-        this.save();
-        
+        try {
+            this.registerAutomation(updated, true);
+            const next = [...this.automations];
+            next[index] = updated;
+            this.save(next);
+        } catch (error) {
+            this.unregisterAutomation(id);
+            this.registerAutomation(previous);
+            throw error;
+        }
+        this.automations[index] = updated;
         return updated;
     }
 
     deleteAutomation(id) {
         const index = this.automations.findIndex(a => a.id === id);
         if (index !== -1) {
+            this.save(this.automations.filter((_, i) => i !== index));
             this.unregisterAutomation(id);
             this.automations.splice(index, 1);
-            this.save();
         }
     }
 
     // --- Execution Logic ---
 
-    registerAutomation(automation) {
+    registerAutomation(automation, strict = false) {
         console.log(`[Automation] Registering: ${automation.name} (${automation.id}) - Enabled: ${automation.enabled}, Type: ${automation.trigger?.type}`);
         
         if (!automation.enabled) {
@@ -154,6 +182,7 @@ class AutomationManager extends EventEmitter {
                 console.log(`[Automation] Scheduled '${automation.name}' with cron: ${automation.trigger.cron} (TZ: ${timezone})`);
             } catch (e) {
                 console.error(`[Automation] Error scheduling ${automation.name}:`, e);
+                if (strict) throw e;
             }
         }
     }

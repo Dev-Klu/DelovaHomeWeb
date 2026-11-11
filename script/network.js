@@ -76,6 +76,50 @@
         cards(); tabs(); devices(); tailscale();
     }
 
+    async function refreshServer() {
+        try {
+            var status = await HL.api('/api/system/health');
+            var gb = function (bytes) { return (bytes / 1073741824).toFixed(1) + ' GB'; };
+            var duration = Math.floor(status.uptime / 3600);
+            $('nwServer').innerHTML = '<div class="hl-server-stats">' +
+                '<div><span>Platform</span><strong>' + esc(status.platform) + '</strong></div>' +
+                '<div><span>Server actief</span><strong>' + duration + ' uur</strong></div>' +
+                '<div><span>Geheugen vrij</span><strong>' + gb(status.memory.free) + ' / ' + gb(status.memory.total) + '</strong></div>' +
+                '<div><span>Opslag vrij (HomeLink-volume)</span><strong>' + (status.disk ? gb(status.disk.free) + ' / ' + gb(status.disk.total) : 'Niet beschikbaar') + '</strong></div>' +
+                '<div><span>Belasting (1 min)</span><strong>' + Number(status.load[0]).toFixed(2) + '</strong></div></div>';
+        } catch (error) {
+            $('nwServer').textContent = 'Serverstatus niet beschikbaar: ' + error.message;
+        }
+    }
+
+    $('nwSpeedtest').addEventListener('click', async function () {
+        var button = this;
+        button.disabled = true;
+        var controller = new AbortController();
+        var timer = setTimeout(function () { controller.abort(); }, 60000);
+        try {
+            $('nwSpeedResult').textContent = 'Download testen...';
+            var start = performance.now();
+            var download = await fetch('https://speed.cloudflare.com/__down?bytes=10000000', { cache: 'no-store', signal: controller.signal });
+            if (!download.ok) throw new Error('Downloadtest: HTTP ' + download.status);
+            var bytes = (await download.arrayBuffer()).byteLength;
+            var downloadMbps = bytes * 8 / ((performance.now() - start) / 1000) / 1000000;
+            $('nwSpeedResult').textContent = 'Upload testen...';
+            var payload = new Uint8Array(2000000);
+            start = performance.now();
+            var upload = await fetch('https://speed.cloudflare.com/__up', { method: 'POST', body: payload, cache: 'no-store', signal: controller.signal });
+            if (!upload.ok) throw new Error('Uploadtest: HTTP ' + upload.status);
+            await upload.arrayBuffer();
+            var uploadMbps = payload.byteLength * 8 / ((performance.now() - start) / 1000) / 1000000;
+            $('nwSpeedResult').textContent = 'Download ' + downloadMbps.toFixed(1) + ' Mbps · Upload ' + uploadMbps.toFixed(1) + ' Mbps';
+        } catch (error) {
+            $('nwSpeedResult').textContent = 'Internettest mislukt: ' + error.message;
+        } finally {
+            clearTimeout(timer);
+            button.disabled = false;
+        }
+    });
+
     document.addEventListener('click', async function (e) {
         var t = e.target.closest('[data-tab]');
         if (t) { tab = t.dataset.tab; tabs(); devices(); return; }
@@ -100,5 +144,7 @@
     $('nwSearch').addEventListener('input', function (e) { query = e.target.value; if (ov) devices(); });
 
     refresh();
+    refreshServer();
     setInterval(refresh, 8000);
+    setInterval(refreshServer, 30000);
 })();

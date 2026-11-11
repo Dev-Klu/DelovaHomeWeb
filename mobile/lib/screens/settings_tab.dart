@@ -27,6 +27,7 @@ class _SettingsTabState extends State<SettingsTab> {
   String _hubVersion = 'Unknown';
   String _appVersion = 'Unknown';
   List<dynamic> _nasDevices = [];
+  String? _nasError;
   String _lang = 'nl';
   String _username = 'User';
   String _role = '';
@@ -67,10 +68,12 @@ class _SettingsTabState extends State<SettingsTab> {
       if (mounted) {
         setState(() {
           _nasDevices = nas;
+          _nasError = null;
         });
       }
     } catch (e) {
       debugPrint('Error fetching NAS devices: $e');
+      if (mounted) setState(() => _nasError = e.toString());
     }
   }
 
@@ -549,6 +552,12 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   void _handleNasTap() {
+    if (_nasError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_nasError!)),
+      );
+      return;
+    }
     if (_nasDevices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No NAS devices found')),

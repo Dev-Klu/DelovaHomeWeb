@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Energy - DelovaHome</title>
+    <title>Energie - HomeLink</title>
     <link rel="stylesheet" href="../style/base.css">
     <script>/* Prevent white flash */(function(){var t=localStorage.getItem('theme');if(t==='dark'){document.documentElement.style.background='#0f172a';document.documentElement.style.color='#f8fafc';if(document.body)document.body.style.background='#0f172a';}else{document.documentElement.style.background='#f8fafc';document.documentElement.style.color='#1e293b';if(document.body)document.body.style.background='#f8fafc';}})();</script>
     <script>(function(){var theme=localStorage.getItem('theme');var href=(theme==='dark'?'../style/style-dark.css':'../style/style.css');var l=document.createElement('link');l.rel='stylesheet';l.id='theme-stylesheet';l.href=href;document.head.appendChild(l);})();</script>
@@ -57,10 +57,11 @@
         <nav class="main-nav"></nav>
 
         <main class="content-area">
-            <header class="page-header">
+            <header class="page-header hl-page-hero">
                 <div>
-                    <h2>Energy Monitor</h2>
-                    <p>Real-time usage and history</p>
+                    <span class="hl-eyebrow"><i class="fas fa-bolt"></i> HomeLink</span>
+                    <h2 data-i18n="energy">Energie</h2>
+                    <p data-i18n="energy_page_desc">Actueel verbruik en geschiedenis.</p>
                 </div>
             </header>
 
@@ -70,40 +71,40 @@
                     <div class="energy-icon icon-usage"><i class="fas fa-bolt"></i></div>
                     <div>
                         <div class="energy-value" id="valUsage">0 W</div>
-                        <div class="energy-label">Current Usage</div>
+                        <div class="energy-label" data-i18n="energy_usage_now">Huidig verbruik</div>
                     </div>
                 </div>
                 <div class="unified-card energy-card">
                     <div class="energy-icon icon-solar"><i class="fas fa-sun"></i></div>
                     <div>
                         <div class="energy-value" id="valSolar">0 W</div>
-                        <div class="energy-label">Solar Generation</div>
+                        <div class="energy-label" data-i18n="energy_solar_now">Zonneproductie</div>
                     </div>
                 </div>
                 <div class="unified-card energy-card">
                     <div class="energy-icon icon-grid-in"><i class="fas fa-plug"></i></div>
                     <div>
                         <div class="energy-value" id="valGrid">0 W</div>
-                        <div class="energy-label">Grid Net</div>
+                        <div class="energy-label" data-i18n="energy_grid_net">Netto netverbruik</div>
                     </div>
                 </div>
                 <div class="unified-card energy-card">
                     <div class="energy-icon icon-usage"><i class="fas fa-coins"></i></div>
                     <div>
                         <div class="energy-value" id="valCost">€ 0.00</div>
-                        <div class="energy-label">Today's Cost</div>
+                        <div class="energy-label" data-i18n="energy_today_cost">Kosten vandaag</div>
                     </div>
                 </div>
             </div>
 
             <!-- Main Chart -->
             <div class="unified-card chart-container">
-                <h3>Last 24 Hours</h3>
+                <h3 data-i18n="energy_last_day">Laatste 24 uur</h3>
                 <canvas id="mainChart"></canvas>
             </div>
 
             <div class="unified-card chart-container" style="margin-top: 20px;">
-                <h3>Last 7 Days (Energy)</h3>
+                <h3 data-i18n="energy_last_week">Laatste 7 dagen</h3>
                 <canvas id="historyChart"></canvas>
             </div>
         </main>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Automatiseringen - DelovaHome</title>
+    <title>Automatiseringen - HomeLink</title>
     <link rel="stylesheet" href="../style/base.css">
     <script>/* Prevent white flash */(function(){var t=localStorage.getItem('theme');if(t==='dark'){document.documentElement.style.background='#0f172a';document.documentElement.style.color='#f8fafc';if(document.body)document.body.style.background='#0f172a';}else{document.documentElement.style.background='#f8fafc';document.documentElement.style.color='#1e293b';if(document.body)document.body.style.background='#f8fafc';}})();</script>
     <script>(function(){var theme=localStorage.getItem('theme');var href=(theme==='dark'?'../style/style-dark.css':'../style/style.css');var l=document.createElement('link');l.rel='stylesheet';l.id='theme-stylesheet';l.href=href;document.head.appendChild(l);})();</script>
@@ -73,11 +73,16 @@
         
         .modal-body {
             padding: 0;
-            overflow-y: auto;
+            overflow-y: auto !important;
+            min-height: 0;
+            flex: 1 1 auto;
+            overscroll-behavior: contain;
             display: flex;
             flex-direction: column;
             gap: 0;
         }
+        #automationModal .modal-content { max-height: calc(100dvh - 32px); margin: 16px auto; }
+        #automationModal .modal-header, #automationModal .modal-footer { flex: 0 0 auto; }
 
         .logic-section {
             padding: 30px;
@@ -197,10 +202,11 @@
         </nav>
 
         <main class="content-area">
-            <header class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <header class="page-header hl-automation-hero">
                 <div>
+                    <span class="hl-eyebrow"><i class="fas fa-wand-magic-sparkles"></i> Slimme routines</span>
                     <h2>Automatiseringen</h2>
-                    <p>Beheer slimme regels voor je huis</p>
+                    <p>Kies wat er gebeurt, en wat HomeLink daarna voor je doet.</p>
                 </div>
                 <button class="btn btn-primary" onclick="openAutomationModal()">
                     <i class="fas fa-plus"></i> Nieuwe Automatisering
@@ -238,7 +244,7 @@
                 <!-- Step 1: WHEN -->
                 <div class="logic-section" style="background: linear-gradient(to bottom, transparent, var(--logic-if-bg));">
                     <div class="logic-header if-header">
-                        <i class="fas fa-bolt"></i> IF (Als dit gebeurt...)
+                        <i class="fas fa-bolt"></i> 1 · Als dit gebeurt
                     </div>
 
                     <div class="trigger-cards">
@@ -256,7 +262,7 @@
                         </div>
                         <div class="trigger-card" onclick="selectTriggerType('weather', this)">
                             <i class="fas fa-cloud-sun" style="color: #6366f1;"></i>
-                            <div>Weer</div>
+                            <div>Weer (nog niet beschikbaar)</div>
                         </div>
                     </div>
 
@@ -336,7 +342,7 @@
                 <!-- Step 2: THEN -->
                 <div class="logic-section" style="background: linear-gradient(to bottom, transparent, var(--logic-then-bg));">
                     <div class="logic-header then-header" style="justify-content: space-between;">
-                        <span><i class="fas fa-play-circle"></i> THEN (Doe dit...)</span>
+                        <span><i class="fas fa-play-circle"></i> 2 · Doe dit</span>
                         
                         <div style="display: flex; gap: 8px;">
                             <button type="button" onclick="addDeviceAction()" title="Apparaat besturen" style="background: var(--card); border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; cursor: pointer; color: var(--text-main); display: flex; align-items: center; gap: 6px; font-weight: 500;">
@@ -368,6 +374,7 @@
 
     <script src="../script/script.js"></script>
     <script src="../script/i18n.js"></script>
+    <script src="../script/homelink-ui.js"></script>
     <script src="../script/automations.js"></script>
 </body>
 </html>

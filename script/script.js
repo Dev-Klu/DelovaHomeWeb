@@ -35,8 +35,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    const avatar = document.querySelector('.user-avatar');
-    const dropdown = document.getElementById('userDropdown');
     const btnLogin = document.getElementById('btnLogin');
     const themeStylesheet = document.getElementById('theme-stylesheet');
     const btnCreateAccount = document.getElementById('btnCreateAccount');
@@ -96,29 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-    const username = localStorage.getItem('username');
-    const usernameDisplay = document.getElementById('usernameDisplay');
-    if (usernameDisplay && username) {
-        usernameDisplay.textContent = `Hallo, ${username}`;
-    }
-
-    // Helper to update greeting using i18n when translations become available
-    function updateGreeting() {
-        const uname = localStorage.getItem('username');
-        if (!uname) return;
-        const els = document.querySelectorAll('#usernameDisplay');
-        let template = (window.t && typeof window.t === 'function') ? window.t('greeting') : null;
-        // Avoid using prettified key "Greeting" if translation not loaded
-        if (template && !template.includes('{name}')) template = null;
-        
-        const text = template ? template.replace('{name}', uname) : `Hallo, ${uname}`;
-        els.forEach(el => { if (el) el.textContent = text; });
-    }
-
-    // Ensure greeting updates when translations load or are applied
-    document.addEventListener('translationsLoaded', updateGreeting);
-    document.addEventListener('translations-applied', updateGreeting);
-
     // Display Hub Name if available (e.g. in header or title)
     let hubName = localStorage.getItem('hubName');
     const brandHeader = document.querySelector('.nav-brand h1');
@@ -138,32 +113,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (brandHeader && hubName) {
         brandHeader.textContent = hubName;
     }
-
-    const logoutLink = document.querySelector('.logout');
-    if (logoutLink) {
-        logoutLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            localStorage.removeItem('username');
-            localStorage.removeItem('userId');
-            window.location.href = '../index.html';
-        });
-    }
-
-    const closeDropdown = () => {
-        if (dropdown) dropdown.classList.remove('show');
-    };
-
-    const toggleDropdown = (e) => {
-        if (!dropdown) return;
-        e.stopPropagation();
-        dropdown.classList.toggle('show');
-    };
-
-    if (avatar) {
-        avatar.addEventListener('click', toggleDropdown);
-    }
-    
-    document.addEventListener('click', closeDropdown);
 
     // function showPairingModal(ip, name) {
     //     const modal = document.getElementById('pairingModal');
@@ -215,12 +164,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
     }
-
-    if (avatar) avatar.addEventListener('click', toggleDropdown);
-    if (dropdown) dropdown.addEventListener('click', (e) => e.stopPropagation());
-
-    document.addEventListener('click', closeDropdown);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDropdown(); });
 
     if (btnLogin) btnLogin.addEventListener('click', login);
     async function login(e) {
@@ -344,34 +287,43 @@ document.addEventListener('DOMContentLoaded', () => {
             { key: 'network', name: 'Netwerk', icon: 'fas fa-network-wired', href: 'network.html' },
             { key: 'energy', name: 'Energy', icon: 'fas fa-bolt', href: 'energy.html' },
             { key: 'automations', name: 'Automatiseringen', icon: 'fas fa-magic', href: 'automations.html' },
+            { key: 'files', name: 'Bestanden', icon: 'fas fa-folder-open', href: 'files.html' },
             { key: 'settings', name: 'Instellingen', icon: 'fas fa-cog', href: 'settings.html' }
         ];
 
         // Immediate render to prevent flickering/missing nav
         renderNav(menuItems, currentPage);
 
-        // Check for NAS (async) and re-render if needed
-        fetch('/api/nas')
-            .then(res => res.json())
-            .then(nasList => {
-                if (nasList && nasList.length > 0) {
-                    // Avoid duplicate insertion
-                    if (!menuItems.find(i => i.key === 'files')) {
-                         // Insert before Settings
-                        menuItems.splice(6, 0, { key: 'files', name: 'Bestanden', icon: 'fas fa-folder-open', href: 'files.html' });
-                        renderNav(menuItems, currentPage);
-                    }
-                }
-            })
-            .catch(() => { /* No NAS or error, keep default nav */ });
-
         // Re-render navigation when translations have been loaded/applied
-        document.addEventListener('translationsLoaded', () => {
+        window.addEventListener('translationsLoaded', () => {
             renderNav(menuItems, window.location.pathname.split('/').pop());
         });
-        document.addEventListener('translations-applied', () => {
+        window.addEventListener('translations-applied', () => {
             renderNav(menuItems, window.location.pathname.split('/').pop());
         });
+
+        document.addEventListener('click', event => {
+            if (!event.target.closest('.user-menu-container')) closeAccountMenu();
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                const button = navContainer.querySelector('.hl-account-button');
+                if (button && button.getAttribute('aria-expanded') === 'true') {
+                    closeAccountMenu();
+                    button.focus();
+                }
+            }
+        });
+    }
+
+    function closeAccountMenu() {
+        const nav = document.querySelector('.main-nav');
+        const button = nav && nav.querySelector('.hl-account-button');
+        const dropdown = nav && nav.querySelector('#userDropdown');
+        if (button && dropdown) {
+            button.setAttribute('aria-expanded', 'false');
+            dropdown.classList.remove('show');
+        }
     }
 
     // Helper to prettify keys if i18n missing
@@ -398,7 +350,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="hl-tagline">${tagline}</span>
                 </span>
             </a>
-            <ul>
+            <div class="hl-nav-heading" data-i18n="nav_workspace">Werkruimte</div>
+            <ul class="hl-nav-links">
         `;
 
         items.forEach(item => {
@@ -410,26 +363,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.head.appendChild(link);
             }
 
-            const active = currentPage === item.href ? 'class="active"' : '';
+            const active = currentPage === item.href ? 'class="active" aria-current="page"' : '';
                 const label = (window.t && item.key) ? window.t(item.key) : (item.name || item.key || '');
                 // Render with data-i18n so i18n.applyTranslations can update labels directly
                 if (item.key) {
-                    html += `<li><a href="${item.href}" ${active}><i class="${item.icon}"></i> <span data-i18n="${item.key}">${label}</span></a></li>`;
+                    html += `<li><a href="${item.href}" ${active}><i class="${item.icon}" aria-hidden="true"></i> <span data-i18n="${item.key}">${label}</span></a></li>`;
                 } else {
                     html += `<li><a href="${item.href}" ${active}><i class="${item.icon}"></i> ${label}</a></li>`;
                 }
         });
 
         html += `
-                <li class="user-menu-container">
-                    <span id="usernameDisplay"></span>
-                    <div class="user-avatar"></div>
-                    <div class="user-dropdown" id="userDropdown">
-                            <a href="settings.html?tab=profile"><i class="fas fa-user"></i> <span data-i18n="profile">${window.t ? window.t('profile') : prettifyKey('profile')}</span></a>
-                            <a href="#" class="logout"><i class="fas fa-sign-out-alt"></i> <span data-i18n="logout">${window.t ? window.t('logout') : prettifyKey('logout')}</span></a>
-                    </div>
-                </li>
             </ul>
+            <div class="user-menu-container">
+                <button class="hl-account-button" type="button" aria-label="Account" aria-expanded="false" aria-controls="userDropdown">
+                    <span class="user-avatar" aria-hidden="true"></span>
+                    <span class="hl-account-details"><strong id="usernameDisplay"></strong><small data-i18n="nav_account">Mijn account</small></span>
+                    <i class="fas fa-ellipsis" aria-hidden="true"></i>
+                </button>
+                <div class="user-dropdown" id="userDropdown">
+                    <a href="settings.html?tab=profile"><i class="fas fa-user"></i> <span data-i18n="profile">${window.t ? window.t('profile') : prettifyKey('profile')}</span></a>
+                    <a href="#" class="logout"><i class="fas fa-sign-out-alt"></i> <span data-i18n="logout">${window.t ? window.t('logout') : prettifyKey('logout')}</span></a>
+                </div>
+            </div>
         `;
 
         // Prevent unnecessary DOM trashing/respringing
@@ -443,20 +399,18 @@ document.addEventListener('DOMContentLoaded', () => {
             try { window.applyTranslations(); } catch (e) { /* ignore */ }
         }
 
-        // Update greeting text in nav after translations applied
-        try { if (typeof updateGreeting === 'function') updateGreeting(); } catch (e) { /* ignore */ }
-        
         // Re-initialize dynamic elements
-        const avatar = nav.querySelector('.user-avatar');
+        const accountButton = nav.querySelector('.hl-account-button');
         const dropdown = nav.querySelector('#userDropdown');
         const logoutLink = nav.querySelector('.logout');
         
-        if (avatar && dropdown) {
-            avatar.addEventListener('click', (e) => {
+        if (accountButton && dropdown) {
+            accountButton.addEventListener('click', (e) => {
                 e.stopPropagation();
-                dropdown.classList.toggle('show');
+                const open = accountButton.getAttribute('aria-expanded') !== 'true';
+                accountButton.setAttribute('aria-expanded', String(open));
+                dropdown.classList.toggle('show', open);
             });
-            dropdown.addEventListener('click', (e) => e.stopPropagation());
         }
         
         if (logoutLink) {
@@ -464,32 +418,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.preventDefault();
                 localStorage.removeItem('username');
                 localStorage.removeItem('userId');
+                localStorage.removeItem('token');
+                localStorage.removeItem('userRole');
                 window.location.href = '../index.html';
             });
         }
 
         // Update username and Avatar
-        const username = localStorage.getItem('username');
+        const username = localStorage.getItem('username') || 'HomeLink';
         const usernameDisplay = document.getElementById('usernameDisplay');
-        if (usernameDisplay && username) {
-            let greetTemplate = (window.t && typeof window.t === 'function') ? window.t('greeting') : null;
-            // Avoid using prettified key "Greeting" if translation not loaded
-            if (greetTemplate && !greetTemplate.includes('{name}')) greetTemplate = null;
-
-            usernameDisplay.textContent = greetTemplate ? greetTemplate.replace('{name}', username) : `Hallo, ${username}`;
-            
-            // Set dynamic avatar with initials & color
+        if (usernameDisplay) {
+            usernameDisplay.textContent = username;
             const avatarEl = nav.querySelector('.user-avatar');
             if (avatarEl) {
-                // Generate color from name
-                let hash = 0;
-                for (let i = 0; i < username.length; i++) {
-                    hash = username.charCodeAt(i) + ((hash << 5) - hash);
-                }
-                const color = Math.floor(Math.abs((Math.sin(hash) * 16777215)) % 16777215).toString(16).padStart(6, '0');
-                
-                avatarEl.style.backgroundImage = `url('https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=${color}&color=fff&bold=true')`;
+                avatarEl.textContent = username.trim().split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join('').toUpperCase() || 'H';
             }
+        }
+
+        const navLinks = nav.querySelector('.hl-nav-links');
+        const activeLink = navLinks && navLinks.querySelector('a.active');
+        if (activeLink && window.matchMedia('(max-width: 768px)').matches) {
+            const listRect = navLinks.getBoundingClientRect();
+            const activeRect = activeLink.getBoundingClientRect();
+            if (activeRect.right > listRect.right) navLinks.scrollLeft += activeRect.right - listRect.right;
+            else if (activeRect.left < listRect.left) navLinks.scrollLeft -= listRect.left - activeRect.left;
         }
         
         // Update Hub Name (Legacy check, should be handled by render now)

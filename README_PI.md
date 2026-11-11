@@ -68,6 +68,33 @@ accepteren. mDNS en SSDP worden niet vanzelf over Tailscale-subnetroutes
 doorgestuurd, en een route geeft geen toegang tot apparaten die die toegang
 blokkeren.
 
+## Automatiseringen, netwerkstatus en opslag
+
+De navigatie staat op grote schermen links en op mobiel onderaan. Veeg de
+mobiele navigatie horizontaal om alle pagina's te zien. Via de accountknop
+open je je profiel of log je uit.
+
+Automatiseringen kunnen worden gepauzeerd en hervat. Een tijdtrigger accepteert
+een dagelijkse tijd of een geldige cron-expressie. Weertriggers worden nog
+niet uitgevoerd en kunnen niet via de webinterface worden opgeslagen.
+
+De netwerkpagina toont gatewaybereikbaarheid en serverstatus; de tekening
+bewijst geen routes tussen netwerken. De handmatige internettest meet de
+verbinding van de browser met Cloudflare en verstuurt daarbij testdata.
+Het resultaat is geen afzonderlijke meting van beide subnetten.
+
+Een bestaande SMB-bron kan via **Instellingen → Integraties → NAS koppelen**
+worden toegevoegd en is daarna onder **Bestanden** zichtbaar. De bestaande
+NAS-functionaliteit kent beperkingen: bestandsrechten en API-toegang zijn nog
+niet volledig afgeschermd, en de SMB-browser kan sommige mappen en bestanden
+verkeerd herkennen. Gebruik deze uitsluitend op een vertrouwd netwerk; stel
+HomeLink of de NAS-API niet rechtstreeks bloot aan internet.
+
+Er wordt nog geen SMB-share op `/srv/homelink-storage` aangemaakt. Daarvoor
+moeten de toegangsbeveiliging en een afzonderlijke Samba-accountconfiguratie
+eerst veilig worden ingericht. De mobiele NAS-browser bevat gerichte fixes,
+maar is nog niet opnieuw gebouwd of op een telefoon getest.
+
 ## Oudere Raspberry Pi-handleiding
 
 ## 1. Prerequisites

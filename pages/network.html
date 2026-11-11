@@ -19,7 +19,7 @@
                 <div>
                     <span class="hl-eyebrow"><i class="fas fa-network-wired"></i> Netwerkbeheer</span>
                     <h2>Starlink <span>&amp;</span> Proximus</h2>
-                    <p>Automatische apparaatdetectie en monitoring van beide netwerken, verbonden via Tailscale.</p>
+                    <p>Apparaatdetectie en monitoring voor beide netwerken, met Tailscale-status en routeringsinformatie.</p>
                 </div>
                 <div class="hl-hero-tools">
                     <span class="hl-pill" id="nwUpdated"><span class="hl-dot"></span><span>Laden…</span></span>
@@ -31,8 +31,22 @@
                 <article class="hl-panel hl-rise" style="--i:1">
                     <div class="hl-panel-head"><h3 class="hl-panel-title"><i class="fas fa-diagram-project"></i> Topologie</h3></div>
                     <div id="nwTopology"><div class="hl-skeleton" style="height:300px"></div></div>
+                    <p class="hl-devices-help">Schematisch overzicht: dit toont geen automatisch bewezen route tussen netwerken. Een niet-reagerende gateway betekent niet dat het hele netwerk offline is.</p>
                 </article>
                 <div id="nwCards" style="display:grid; gap:18px; align-content:start; min-width:0"></div>
+            </section>
+
+            <section class="hl-grid cols-2-1">
+                <article class="hl-panel">
+                    <div class="hl-panel-head"><h3 class="hl-panel-title"><i class="fas fa-server"></i> HomeLink-server</h3></div>
+                    <div id="nwServer" aria-live="polite">Serverstatus laden...</div>
+                </article>
+                <article class="hl-panel">
+                    <div class="hl-panel-head"><h3 class="hl-panel-title"><i class="fas fa-gauge-high"></i> Internetsnelheid</h3></div>
+                    <p class="hl-devices-help">Test de internetverbinding van dit apparaat via Cloudflare, niet afzonderlijk beide netwerken. De test verstuurt testdata naar Cloudflare.</p>
+                    <button id="nwSpeedtest" type="button">Start internettest</button>
+                    <p id="nwSpeedResult" role="status" aria-live="polite">Nog niet getest.</p>
+                </article>
             </section>
 
             <article class="hl-panel hl-rise" style="--i:3; margin-bottom:18px">

@@ -601,12 +601,13 @@ class ApiService {
         final data = json.decode(response.body);
         if (data is List) return data;
         if (data is Map && data['nas'] is List) return data['nas'];
-        return [];
+        throw Exception('Invalid NAS list response');
       }
+      throw Exception('NAS list request failed (HTTP ${response.statusCode})');
     } catch (e) {
       debugPrint('Error fetching NAS devices: $e');
+      rethrow;
     }
-    return [];
   }
 
   Future<List<dynamic>> getNasFiles(String nasId, [String path = '/']) async {
@@ -621,12 +622,13 @@ class ApiService {
         final data = json.decode(response.body);
         if (data is List) return data;
         if (data is Map && data['files'] is List) return data['files'];
-        return [];
+        throw Exception('Invalid NAS files response');
       }
+      throw Exception('NAS files request failed (HTTP ${response.statusCode})');
     } catch (e) {
       debugPrint('Error fetching NAS files: $e');
+      rethrow;
     }
-    return [];
   }
 
   Future<void> updateKnxConfig(String ip, String port, String physAddr) async {

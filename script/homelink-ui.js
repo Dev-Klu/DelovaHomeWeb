@@ -90,17 +90,13 @@
         var out = '<svg class="hl-topo" viewBox="0 0 760 310" role="img" aria-label="Netwerktopologie">' +
             '<defs><linearGradient id="tp-flow" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs>';
 
-        out += link('M380 64 C380 100 170 86 170 109', s.status);
-        out += link('M380 64 C380 100 590 86 590 109', p.status);
         out += link('M170 171 L170 229', s.status);
         out += link('M590 171 L590 229', p.status);
-        out += link('M305 260 L255 260', s.status);
-        out += link('M455 260 L505 260', p.status);
-        out += '<path class="tail" d="M295 140 L255 140"/><path class="tail" d="M465 140 L505 140"/><path class="tail" d="M380 171 L380 229"/>';
+        if (tsOnline) out += '<path class="tail" d="M380 171 L380 229"/>';
 
         out += '<circle class="ring" cx="380" cy="260" r="40"/><circle class="ring r2" cx="380" cy="260" r="40"/>';
 
-        out += node(380, 40, 150, 'Internet', inet.online === null ? '…' : (inet.online ? lat(inet) : 'offline'), inet.online === null ? 'unknown' : (inet.online ? 'online' : 'offline'));
+        out += node(380, 40, 150, 'Internet', inet.online == null ? '…' : (inet.online ? lat(inet) : 'offline'), inet.online == null ? 'unknown' : (inet.online ? 'online' : 'offline'));
         out += node(170, 140, 170, s.name, s.cidr, s.status, 'Gateway ' + lat(s));
         out += node(590, 140, 170, p.name, p.cidr, p.status, 'Gateway ' + lat(p));
         out += node(380, 140, 150, 'Tailscale', ts.installed ? (tsPeers + ' nodes online') : 'niet gevonden', tsOnline ? 'online' : (ts.installed ? 'offline' : 'unknown'));

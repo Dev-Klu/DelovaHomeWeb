@@ -201,8 +201,8 @@ class _NasBrowserScreenState extends State<NasBrowserScreen> {
                               itemBuilder: (context, index) {
                                 final file = _files[index];
                                 final name = file['name'] ?? 'Unknown';
-                                final type = file['type'] ?? 'file';
-                                final isDir = type == 'directory';
+                                final isDir = file['isDirectory'] == true || file['type'] == 'directory';
+                                final type = isDir ? 'directory' : 'file';
 
                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 8.0),

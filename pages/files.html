@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bestanden - DelovaHome</title>
+    <title>Bestanden - HomeLink</title>
     <link rel="stylesheet" href="../style/base.css">
     <script>/* Prevent white flash */(function(){var t=localStorage.getItem('theme');if(t==='dark'){document.documentElement.style.background='#0f172a';document.documentElement.style.color='#f8fafc';if(document.body)document.body.style.background='#0f172a';}else{document.documentElement.style.background='#f8fafc';document.documentElement.style.color='#1e293b';if(document.body)document.body.style.background='#f8fafc';}})();</script>
     <script>(function(){var theme=localStorage.getItem('theme');var href=(theme==='dark'?'../style/style-dark.css':'../style/style.css');var l=document.createElement('link');l.rel='stylesheet';l.id='theme-stylesheet';l.href=href;document.head.appendChild(l);})();</script>
@@ -91,9 +91,13 @@
         </nav>
 
         <main class="content-area">
-            <header class="page-header">
-                <h2 data-i18n="files">Bestanden</h2>
-                <p data-i18n="files_desc">Blader door je netwerkopslag</p>
+            <header class="page-header hl-page-hero hl-page-hero-actions">
+                <div>
+                    <span class="hl-eyebrow"><i class="fas fa-folder-open"></i> HomeLink</span>
+                    <h2 data-i18n="files">Bestanden</h2>
+                    <p data-i18n="files_desc">Blader door je netwerkopslag</p>
+                </div>
+                <a class="btn btn-secondary" href="settings.html?tab=integrations" data-i18n="nas_connect">NAS verbinden</a>
             </header>
 
             <div class="file-browser">
@@ -114,6 +118,7 @@
 
     <script src="../script/i18n.js"></script>
     <script src="../script/script.js"></script>
+    <script src="../script/homelink-ui.js"></script>
     <script src="../script/files.js"></script>
 </body>
 </html>
