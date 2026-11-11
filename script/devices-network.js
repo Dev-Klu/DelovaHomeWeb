@@ -8,8 +8,12 @@
         const networks = overview.networks || [];
         const filter = $('deviceNetworkFilter');
         const selected = filter.value;
-        filter.innerHTML = '<option value="all">Alle netwerken</option>' +
+        const options = '<option value="all">Alle netwerken</option>' +
             networks.map(network => `<option value="${esc(network.id)}">${esc(network.name)}</option>`).join('');
+        if (filter.renderedContent !== options) {
+            filter.innerHTML = options;
+            filter.renderedContent = options;
+        }
         filter.value = networks.some(network => network.id === selected) ? selected : 'all';
 
         const query = $('deviceNetworkSearch').value.trim().toLowerCase();
@@ -27,11 +31,9 @@
         const total = networks.reduce((count, network) => count + (network.devices || []).length, 0);
         const online = networks.reduce((count, network) => count + (network.deviceCount || 0), 0);
         $('deviceNetworkSummary').textContent = `${total} bekend · ${online} bereikbaar${scanning ? ' · scan bezig' : ''}`;
-        if (!rows.length) {
-            $('deviceNetworkList').innerHTML = `<div class="hl-empty">${scanning ? 'Netwerken worden gescand...' : 'Geen apparaten voor deze selectie. Controleer de route of start een scan.'}</div>`;
-            return;
-        }
-        $('deviceNetworkList').innerHTML = '<div class="hl-table-wrap"><table class="hl-table"><thead><tr><th>Apparaat</th><th>Netwerk</th><th>Status</th><th>Actie</th></tr></thead><tbody>' +
+        const html = !rows.length
+            ? `<div class="hl-empty">${scanning ? 'Netwerken worden gescand...' : 'Geen apparaten voor deze selectie. Controleer de route of start een scan.'}</div>`
+            : '<div class="hl-table-wrap"><table class="hl-table"><thead><tr><th>Apparaat</th><th>Netwerk</th><th>Status</th><th>Actie</th></tr></thead><tbody>' +
             rows.map(({ device, network }) => {
                 const known = typeof allDevices !== 'undefined' && allDevices.some(item => item.ip === device.ip);
                 const status = device.online === true ? 'Bereikbaar' : device.online === false ? 'Offline' : 'Niet bevestigd';
@@ -40,9 +42,13 @@
                     ? ` · poorten ${device.openPorts.join(', ')}` : '';
                 return `<tr><td><strong>${esc(device.name)}</strong><div class="hl-row-sub hl-mono">${esc(device.ip)}${esc(ports)}</div></td>` +
                     `<td>${esc(network.name)}</td><td><span class="hl-badge ${statusClass}">${status}</span></td>` +
-                    `<td><div class="hl-devices-actions"><button class="hl-device-row-action" type="button" data-device-ip="${esc(device.ip)}">${known ? 'Bediening' : 'Ander apparaat'}</button>` +
-                    `<button class="hl-device-row-action" type="button" data-tv-ip="${esc(device.ip)}">Tv toevoegen</button></div></td></tr>`;
+                    `<td><button class="hl-device-row-action" type="button" data-device-ip="${esc(device.ip)}">${known ? 'Details' : 'Instellen'}</button></td></tr>`;
             }).join('') + '</tbody></table></div>';
+        const list = $('deviceNetworkList');
+        if (list.renderedContent !== html) {
+            list.innerHTML = html;
+            list.renderedContent = html;
+        }
     }
 
     async function refresh() {
@@ -54,6 +60,7 @@
         } catch (error) {
             $('deviceNetworkSummary').textContent = 'Netwerkstatus niet beschikbaar';
             $('deviceNetworkList').textContent = error.message;
+            $('deviceNetworkList').renderedContent = null;
         } finally {
             loading = false;
         }
@@ -70,18 +77,27 @@
         $('deviceTvDialog').showModal();
     }
     $('deviceTvManual').addEventListener('click', () => openTvDialog(''));
+    let setupIp = '';
+    $('deviceSetupCancel').addEventListener('click', () => $('deviceSetupDialog').close());
+    $('deviceSetupTv').addEventListener('click', () => {
+        $('deviceSetupDialog').close();
+        openTvDialog(setupIp);
+    });
+    $('deviceSetupOther').addEventListener('click', () => {
+        $('deviceSetupDialog').close();
+        if (window.openManualPairing) window.openManualPairing(setupIp);
+    });
     $('deviceNetworkList').addEventListener('click', event => {
-        const tvButton = event.target.closest('[data-tv-ip]');
-        if (tvButton) {
-            openTvDialog(tvButton.dataset.tvIp);
-            return;
-        }
         const button = event.target.closest('[data-device-ip]');
         if (!button) return;
         const ip = button.dataset.deviceIp;
         const known = typeof allDevices !== 'undefined' && allDevices.find(device => device.ip === ip);
         if (known && window.openDeviceDetail) window.openDeviceDetail(known.id);
-        else if (window.openManualPairing) window.openManualPairing(ip);
+        else {
+            setupIp = ip;
+            $('deviceSetupDescription').textContent = `Kies zelf het type voor ${ip}.`;
+            $('deviceSetupDialog').showModal();
+        }
     });
     $('deviceTvCancel').addEventListener('click', () => $('deviceTvDialog').close());
     $('deviceTvForm').addEventListener('submit', async event => {

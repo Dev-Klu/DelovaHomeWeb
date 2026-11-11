@@ -59,6 +59,7 @@
                     <button class="chip" data-category="other" data-i18n="category_other">Other</button>
                 </div>
             </div>
+            <p id="devicePageStatus" class="hl-device-feedback" role="status" aria-live="polite" hidden></p>
 
             <section class="hl-panel hl-device-discovery hl-rise" aria-labelledby="deviceNetworkTitle">
                 <div class="hl-discovery-heading">
@@ -86,6 +87,19 @@
                 <div id="deviceNetworkList" aria-live="polite"><div class="hl-empty">Netwerkapparaten laden...</div></div>
                 <p class="hl-devices-help">Geen reactie betekent niet altijd offline. Tailscale-subnetroutes moeten zijn goedgekeurd; multicastdetectie werkt doorgaans niet over subnetroutes.</p>
             </section>
+
+            <dialog id="deviceSetupDialog" class="hl-tv-dialog">
+                <span class="hl-eyebrow"><i class="fas fa-sliders-h"></i> Apparaat instellen</span>
+                <h2>Wat wil je toevoegen?</h2>
+                <p id="deviceSetupDescription"></p>
+                <p>Herkenning op het netwerk betekent niet dat bediening voor dit apparaat beschikbaar is.</p>
+                <div class="hl-setup-options">
+                    <button type="button" class="btn btn-secondary" id="deviceSetupTv"><i class="fas fa-tv"></i> Samsung of Android / Google TV</button>
+                    <button type="button" class="btn btn-secondary" id="deviceSetupOther"><i class="fas fa-key"></i> Hue, camera, NAS of computer</button>
+                </div>
+                <p class="hl-devices-help">Yeelight: schakel LAN-beheer in de app in en zoek daarna opnieuw naar slimme apparaten. Niet alle apparaten ondersteunen lokale bediening.</p>
+                <button type="button" class="btn btn-secondary" id="deviceSetupCancel">Annuleren</button>
+            </dialog>
 
             <dialog id="deviceTvDialog" class="hl-tv-dialog">
                 <form id="deviceTvForm">

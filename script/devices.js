@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="modal-tab" data-tab="energy">Energie</div>
                         <div class="modal-tab" data-tab="settings">Instellingen</div>
                     </div>
+                    <p id="deviceActionStatus" class="hl-device-feedback" role="status" aria-live="polite" hidden></p>
                     <div id="modalDeviceBody" class="device-modal-body">
                         <!-- Dynamic Content -->
                     </div>
@@ -324,7 +325,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function fetchDevices() {
         // Fetch standard devices
-        const p1 = fetch('/api/devices').then(res => res.json());
+        const p1 = fetch('/api/devices').then(res => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+        });
         // Fetch PS5 devices specifically
         const p2 = fetch('/api/ps5/devices').then(res => res.json()).catch(() => []);
 
@@ -357,7 +361,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             })
-            .catch(err => console.error('Error fetching devices:', err));
+            .catch(err => {
+                console.error('Error fetching devices:', err);
+                const status = document.getElementById('devicePageStatus');
+                status.textContent = `Apparatenlijst kon niet worden geladen: ${err.message}`;
+                status.hidden = false;
+            });
     }
     window.refreshDeviceList = fetchDevices;
 
@@ -370,7 +379,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const matches = (list) => list.some(k => type.includes(k) || name.includes(k) || protocol.includes(k) || protocols.includes(k));
 
         if (matches(['camera', 'onvif', 'rtsp'])) return { id: 'cameras', labelKey: 'category_cameras', fallback: 'Cameras' };
-        if (matches(['light', 'lamp', 'bulb', 'dimmer', 'switch', 'wled', 'hue', 'nanoleaf'])) return { id: 'lights', labelKey: 'category_lights', fallback: 'Lights' };
+        if (matches(['light', 'lamp', 'bulb', 'dimmer', 'switch', 'wled', 'hue', 'nanoleaf', 'yeelight', 'yeelink'])) return { id: 'lights', labelKey: 'category_lights', fallback: 'Lights' };
         if (matches(['thermostat', 'climate', 'hvac', 'heater', 'ac', 'temperature'])) return { id: 'climate', labelKey: 'category_climate', fallback: 'Climate' };
         if (matches(['lock', 'alarm', 'motion', 'door', 'window', 'leak', 'smoke', 'presence', 'sensor'])) return { id: 'security', labelKey: 'category_security', fallback: 'Security' };
         if (matches(['tv', 'speaker', 'receiver', 'sonos', 'homepod', 'airplay', 'spotify', 'googlecast', 'cast', 'denon', 'console', 'kodi'])) return { id: 'media', labelKey: 'category_media', fallback: 'Media' };
@@ -453,18 +462,26 @@ document.addEventListener('DOMContentLoaded', () => {
         const type = device.type ? device.type.toLowerCase() : 'unknown';
         const category = getDeviceCategory(device);
         const categoryLabel = window.t ? window.t(category.labelKey) : category.fallback;
-        // HomePods are "always on" for UI purposes
-        const isHomePod = (type === 'speaker' && device.protocol === 'mdns-homekit') || (device.name && device.name.includes('HomePod'));
-        const isOn = (device.state && device.state.on) || isHomePod;
-        
+        const state = device.state || {};
+        const isOn = typeof state.on === 'boolean' ? state.on : null;
         const hasError = !!device.error;
-        let statusClass = isOn ? 'on' : 'off';
-        if (hasError) statusClass = 'error';
+        const statusClass = hasError ? 'error' : isOn === true ? 'on' : isOn === false ? 'off' : 'unknown';
+        const isSwitchable = ['light', 'shelly', 'tv'].includes(type) &&
+            (['hue', 'mqtt', 'samsung-tizen', 'mdns-googlecast', 'lg-webos'].includes(device.protocol) ||
+             /yeelight|yeelink|ylbulb|shelly|dali/i.test([device.name, device.protocol, device.model].filter(Boolean).join(' ')));
 
         if (!card) {
             card = document.createElement('div');
             card.className = `device-card`;
             card.id = `device-card-${device.id}`;
+            card.tabIndex = 0;
+            card.setAttribute('role', 'group');
+            card.onkeydown = event => {
+                if (event.target === card && (event.key === 'Enter' || event.key === ' ')) {
+                    event.preventDefault();
+                    openDeviceDetail(device.id);
+                }
+            };
             // Add click handler to open modal
             card.onclick = (e) => {
                 // Prevent opening if clicking a button directly
@@ -479,56 +496,13 @@ document.addEventListener('DOMContentLoaded', () => {
         card.setAttribute('data-category', category.id);
         card.dataset.search = [device.name, device.type, device.ip, device.roomName, device.protocol].filter(Boolean).join(' ').toLowerCase();
 
-        // Simple Card Content (Summary)
-        let summary = '';
-        if (hasError) {
-            summary = '<span style="color: #ff6b6b; font-weight: bold;">Error</span>';
-        } else if (isOn) {
-            const hasMediaProtocol = (device.protocols && (device.protocols.includes('airplay') || device.protocols.includes('raop') || device.protocols.includes('spotify-connect') || device.protocols.includes('googlecast')));
-            
-            // Sensor Info Helper
-            let sensorInfo = '';
-            const fmt = (n) => Math.round(n * 10) / 10;
-            if (device.state.temperature != null) {
-                sensorInfo = `${fmt(device.state.temperature)}°C`;
-                if (device.state.humidity != null) sensorInfo += ` | ${Math.round(device.state.humidity)}%`;
-            }
-
-            if (type === 'light') summary = `${device.state.brightness || 100}%`;
-            else if (type === 'thermostat' || type === 'sensor') summary = sensorInfo || `${device.state.temperature}°C`;
-            else if (type === 'lock') summary = device.state.isLocked ? 'Locked' : 'Unlocked';
-            else if (type === 'server' || type === 'computer' || type === 'nas' || type === 'rpi') {
-                 let parts = [];
-                 if (device.state.health) {
-                     if (typeof device.state.health === 'object' && device.state.health.status) {
-                         if (device.state.health.status !== 'ok') parts.push(HL.esc(device.state.health.status.toUpperCase()));
-                     } else if (typeof device.state.health === 'string' && device.state.health !== 'ok') {
-                         parts.push(HL.esc(device.state.health.toUpperCase()));
-                     }
-                 }
-                 if (device.state.cpu !== undefined) parts.push(`CPU: ${Math.round(device.state.cpu)}%`);
-                 if (device.state.disk !== undefined) parts.push(`Disk: ${device.state.disk}%`);
-                 if (parts.length > 0) summary = parts.join(' | ');
-                 else summary = 'Online';
-            }
-            else if ((type === 'tv' || type === 'speaker' || type === 'receiver' || hasMediaProtocol) && device.state.mediaTitle) {
-                summary = `<span style="font-size: 0.9em; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;">${HL.esc(device.state.mediaTitle)}</span>`;
-                if (device.state.mediaArtist) {
-                    summary += `<span style="font-size: 0.8em; color: #aaa; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;">${HL.esc(device.state.mediaArtist)}</span>`;
-                }
-                if (sensorInfo) summary += `<span style="font-size: 0.8em; opacity: 0.8; display: block; margin-top: 2px;">${sensorInfo}</span>`;
-            }
-            else if (sensorInfo) summary = sensorInfo;
-            else summary = 'Aan';
-
-            // Append Power Usage if available and not already redundant with simple 'Aan' which we replaced
-            if (device.state.power > 0) {
-                if (summary === 'Aan') summary = `${device.state.power} W`;
-                else if (!summary.includes('W')) summary += ` <span style="opacity:0.7; font-size:0.9em;">• ${device.state.power} W</span>`;
-            }
-        } else {
-            summary = 'Uit';
-        }
+        let summary = device.ip || device.roomName || 'Geen extra gegevens';
+        const temperature = state.temperature === '' || state.temperature == null ? NaN : Number(state.temperature);
+        const humidity = state.humidity === '' || state.humidity == null ? NaN : Number(state.humidity);
+        if (Number.isFinite(temperature)) summary = `${Math.round(temperature * 10) / 10} °C${Number.isFinite(humidity) ? ` · ${Math.round(humidity)}%` : ''}`;
+        else if (type === 'light' && state.brightness != null) summary = `Helderheid ${state.brightness}%`;
+        else if (state.mediaTitle) summary = state.mediaTitle;
+        const statusLabel = hasError ? 'Aandacht nodig' : isOn === true ? 'Aan' : isOn === false ? 'Uit' : 'Status onbekend';
 
         const newHtml = `
             <div class="device-card-inner">
@@ -536,34 +510,34 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="device-icon-wrapper ${statusClass}">
                         <i class="${icon}"></i>
                     </div>
-                    <div class="device-status-indicator ${statusClass}"></div>
+                    <span class="hl-card-status ${statusClass}"><span></span>${statusLabel}</span>
                 </div>
                 <div class="device-card-middle">
                     <span class="device-category-badge">${HL.esc(categoryLabel)}</span>
-                    <h3 class="device-name">${HL.esc(device.name)}</h3>
-                    <p class="device-status-text">${summary}</p>
+                    <h3 class="device-name" title="${HL.esc(device.name || 'Onbekend')}">${HL.esc(device.name || 'Onbekend')}</h3>
+                    <p class="device-status-text">${HL.esc(summary)}</p>
                 </div>
                 <div class="device-card-bottom">
-                    <button class="btn-icon-only" title="Meer opties">
-                        <i class="fas fa-ellipsis-h"></i>
-                    </button>
-                    <button class="btn-power ${isOn ? 'active' : ''}" aria-label="Apparaat schakelen">
+                    <button class="hl-card-details" type="button">Details <i class="fas fa-arrow-right"></i></button>
+                    ${isSwitchable && isOn !== null ? `<button class="btn-power ${isOn ? 'active' : ''}" type="button" aria-label="${isOn ? 'Uitschakelen' : 'Inschakelen'}">
                         <i class="fas fa-power-off"></i>
-                    </button>
+                    </button>` : ''}
                 </div>
             </div>
         `;
         
         // Only update DOM if content changed to prevent flickering
-        if (card.innerHTML !== newHtml) {
+        if (card.renderedContent !== newHtml) {
             card.innerHTML = newHtml;
-            card.querySelector('.btn-icon-only').addEventListener('click', event => {
+            card.renderedContent = newHtml;
+            card.querySelector('.hl-card-details').addEventListener('click', event => {
                 event.stopPropagation();
-                showDeviceMenu(device.id, event);
+                openDeviceDetail(device.id);
             });
-            card.querySelector('.btn-power').addEventListener('click', event => {
+            const power = card.querySelector('.btn-power');
+            if (power) power.addEventListener('click', event => {
                 event.stopPropagation();
-                toggleDevice(device.id);
+                controlDevice(device.id, isOn ? 'turn_off' : 'turn_on');
             });
         }
     }
@@ -597,10 +571,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderGrid(devices) {
         grid.style.display = '';
         const sectionsContainer = document.querySelector('.device-sections');
-        if (sectionsContainer) sectionsContainer.style.display = 'none';
+        if (sectionsContainer) {
+            sectionsContainer.style.display = 'none';
+            sectionsContainer.devicesSignature = null;
+        }
 
         if (devices.length === 0) {
-            grid.innerHTML = '<div class="loading-devices"><i class="fas fa-spinner fa-spin"></i> Apparaten zoeken...</div>';
+            grid.innerHTML = '<div class="loading-devices">Nog geen slimme apparaten gevonden. Start een zoekopdracht of voeg een apparaat toe.</div>';
             return;
         }
 
@@ -639,10 +616,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         sectionsContainer.style.display = '';
+        const signature = JSON.stringify(devices);
+        if (sectionsContainer.devicesSignature === signature) return;
+        sectionsContainer.devicesSignature = signature;
         sectionsContainer.innerHTML = '';
 
         if (devices.length === 0) {
-            sectionsContainer.innerHTML = '<div class="loading-devices"><i class="fas fa-spinner fa-spin"></i> Apparaten zoeken...</div>';
+            sectionsContainer.innerHTML = '<div class="loading-devices">Nog geen slimme apparaten gevonden. Start een zoekopdracht of voeg een apparaat toe.</div>';
             return;
         }
 
@@ -714,6 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const modal = document.getElementById('deviceModal');
         modal.dataset.deviceId = id;
+        document.getElementById('deviceActionStatus').hidden = true;
         document.getElementById('modalDeviceName').textContent = device.name;
         
         // Reset tabs to Controls
@@ -759,6 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     function updateModalContent(device, force = false) {
+        device = { ...device, type: device.type || 'unknown', name: device.name || 'Onbekend', state: device.state || {} };
         const modalContent = document.querySelector('.device-modal-content');
         const body = document.getElementById('modalDeviceBody');
         
@@ -846,7 +828,14 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (type === 'tv') icon = 'fa-tv';
         else if (type === 'speaker') icon = 'fa-music';
 
+        const isSamsung = device.protocol === 'samsung-tizen';
+        const isYeelight = /yeelight|yeelink|ylbulb/i.test([device.name, device.protocol, device.model].filter(Boolean).join(' '));
         let controlsHtml = '';
+        if (isSamsung) {
+            controlsHtml += `<div class="hl-device-guide"><strong>Samsung verbinden</strong><p>Zet het scherm aan. Bij de eerste verbinding verschijnt mogelijk een verzoek op de tv of monitor: kies <b>Toestaan</b>. Wacht daarna op de verbindingsstatus.</p><button class="btn btn-secondary" onclick="showPairingModal('${device.id}')"><i class="fas fa-link"></i> Verbinding starten</button></div>`;
+        } else if (isYeelight) {
+            controlsHtml += `<div class="hl-device-guide"><strong>Yeelight lokaal bedienen</strong><p>Schakel bij deze lamp LAN-beheer (LAN Control) in via de Yeelight-app. Controleer ook of HomeLink de lamp via het netwerk kan bereiken.</p></div>`;
+        }
 
         // Power Button (except for sensors/locks/cameras/nas)
         if (type !== 'sensor' && type !== 'lock' && type !== 'camera' && type !== 'nas') {
@@ -917,7 +906,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="modal-control-group">
                     <div class="modal-slider-container">
                         <label class="modal-slider-label" style="display:block; margin-bottom:10px; font-weight:500;">Helderheid: ${device.state.brightness || 0}%</label>
-                        <input type="range" class="modal-slider" min="0" max="100" value="${device.state.brightness || 0}"
+                        <input type="range" class="modal-slider" min="${isYeelight ? 1 : 0}" max="100" value="${device.state.brightness || (isYeelight ? 1 : 0)}"
                             onchange="controlDevice('${device.id}', 'set_brightness', this.value)">
                     </div>
                 </div>
@@ -935,7 +924,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
             `;
-        } else if (type === 'tv' && isOn) {
+        } else if (type === 'tv' && (isOn || isSamsung || device.protocol === 'mdns-googlecast')) {
             controlsHtml += `
                 <div class="remote-layout">
                     <!-- D-Pad Navigation -->
@@ -987,22 +976,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
             `;
             
-            // Add Re-pair button for Samsung or generic TVs that might have connection issues
-            if (device.protocol === 'samsung-tizen' || device.name.toLowerCase().includes('samsung')) {
-                controlsHtml += `
-                    <div style="margin-top: 15px; width: 100%; display: flex; justify-content: center;">
-                        <button class="btn btn-secondary" onclick="showPairingModal('${device.id}')">
-                            <i class="fas fa-link"></i> Koppelen
-                        </button>
-                        <button class="btn btn-secondary" style="background-color: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 4px; display: flex; align-items: center; gap: 8px;" onclick="if(confirm(window.t ? window.t('confirm_start_samsung_pair') : 'Start pairing process for this Samsung TV? You may need to accept a popup on the TV.')) controlDevice('${device.id}', 'repair')">
-                            <i class="fas fa-link"></i> Re-pair Connection
-                        </button>
-                    </div>
-                </div>
-                `;
-            } else {
-                controlsHtml += `</div>`;
-            }
+            controlsHtml += `</div>`;
 
         } else if (type === 'nas') {
             controlsHtml += `<div style="display: flex; flex-direction: column; gap: 10px; align-items: center; margin-top: 20px;">`;
@@ -1345,17 +1319,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Add Pairing Button for Android TV / Google TV
-        // Show for explicit protocol OR generic TVs that aren't other known brands
         const proto = device.protocol || '';
-        const isOtherTv = device.type === 'tv' && 
-                          !proto.includes('samsung') && 
-                          !proto.includes('webos') && 
-                          !proto.includes('airplay') &&
-                          !device.name.toLowerCase().includes('samsung') &&
-                          !device.name.toLowerCase().includes('lg') &&
-                          !device.name.toLowerCase().includes('apple');
-
-        if (proto === 'mdns-googlecast' || isOtherTv) {
+        if (proto === 'mdns-googlecast' && type === 'tv') {
              controlsHtml += `
                 <div class="control-group" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 20px;">
                     <button class="btn-secondary" style="width: 100%; padding: 12px;" onclick="startPairing('${device.ip}', '${device.name}')">
@@ -1442,7 +1407,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div style="color: #888;">IP Adres:</div><div>${device.ip || 'Onbekend'}</div>
                 <div style="color: #888;">MAC Adres:</div><div>${device.mac || 'Onbekend'}</div>
                 <div style="color: #888;">Protocol:</div><div>${device.protocol || 'Onbekend'}</div>
-                <div style="color: #888;">Status:</div><div>${device.state.on ? 'Aan' : 'Uit'}</div>
+                <div style="color: #888;">Status:</div><div>${typeof device.state.on !== 'boolean' ? 'Onbekend' : device.state.on ? 'Aan' : 'Uit'}</div>
                 ${device.state.platform ? `<div style="color: #888;">OS:</div><div>${device.state.platform}</div>` : ''}
                 <div style="color: #888;">ID:</div><div style="font-size: 0.8em; word-break: break-all;">${device.id}</div>
             </div>
@@ -1684,33 +1649,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    window.toggleDevice = (id) => {
-        fetch(`/api/devices/${id}/command`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command: 'toggle' })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.ok) fetchDevices();
-        });
-    };
-
-    window.controlDevice = (id, command, value) => {
-        // Handle color object
-        if (command === 'set_color' && typeof value === 'object') {
-            // value is already object
+    function showDeviceFeedback(id, message) {
+        const device = allDevices.find(item => item.id === id);
+        const pageStatus = document.getElementById('devicePageStatus');
+        pageStatus.textContent = `${device ? device.name : 'Apparaat'}: ${message}`;
+        pageStatus.hidden = false;
+        const modal = document.getElementById('deviceModal');
+        if (modal.dataset.deviceId === id && modal.style.display === 'block') {
+            const status = document.getElementById('deviceActionStatus');
+            status.textContent = message;
+            status.hidden = false;
         }
+    }
 
-        fetch(`/api/devices/${id}/command`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command, value })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.ok) fetchDevices();
-        });
+    window.toggleDevice = id => window.controlDevice(id, 'toggle');
+    window.controlDevice = async (id, command, value) => {
+        const device = allDevices.find(item => item.id === id);
+        const samsung = device && device.protocol === 'samsung-tizen';
+        showDeviceFeedback(id, samsung
+            ? 'Verbinding wordt gestart. Kies zo nodig Toestaan op je Samsung-scherm.'
+            : 'Opdracht versturen...');
+        try {
+            const response = await fetch(`/api/devices/${encodeURIComponent(id)}/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command, value })
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || data.error || `HTTP ${response.status}`);
+            if (!samsung) showDeviceFeedback(id, data.confirmed
+                ? 'De lamp heeft de opdracht bevestigd. Status wordt bijgewerkt.'
+                : 'Opdracht verstuurd; het apparaat heeft de uitvoering nog niet bevestigd.');
+            fetchDevices();
+        } catch (error) {
+            showDeviceFeedback(id, `Opdracht mislukt: ${error.message}`);
+        }
     };
 
     window.controlPS5 = (id, action) => {
@@ -1978,26 +1950,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- WebSocket for Real-time Events (Pairing) ---
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-
-    ws.onmessage = (event) => {
-        try {
-            const msg = JSON.parse(event.data);
-            if (msg.type === 'pairing-required') {
-                // Use the global showPairingModal
-                if (window.showPairingModal) {
-                    window.showPairingModal(msg.ip, msg.name, 'tv');
+    function connectDeviceEvents() {
+        const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+        ws.onclose = () => setTimeout(connectDeviceEvents, 3000);
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'pairing-required') {
+                    if (window.showPairingModal) {
+                        window.showPairingModal(msg.ip, msg.name, 'tv');
+                    }
+                } else if (msg.type === 'pairing-result' && currentPairingDevice && currentPairingDevice.ip === msg.ip) {
+                    const status = document.getElementById('pairingStatus');
+                    if (msg.status === 'waiting_for_pin') status.textContent = 'Voer de code in die op de tv verschijnt.';
+                    if (msg.status === 'paired') status.textContent = 'Tv gekoppeld. De verbinding wordt gestart.';
+                    if (msg.status === 'pairing_failed') status.textContent = `Koppelen mislukt: ${msg.error || 'onbekende fout'}`;
+                } else if (msg.type === 'device-connection') {
+                    const device = allDevices.find(item => item.ip === msg.ip && item.protocol === 'samsung-tizen');
+                    const messages = {
+                        connecting: 'Verbinden... Kies zo nodig Toestaan op je Samsung-tv of -monitor.',
+                        connected: 'Verbonden met je Samsung-scherm.',
+                        sent: 'Opdracht naar het Samsung-scherm verstuurd.',
+                        wake_sent: 'Wake-on-LAN verstuurd; controleer of het scherm opstart.',
+                        wake_failed: 'Inschakelen mislukt: geen MAC-adres gevonden voor Wake-on-LAN.',
+                        failed: 'Verbinding of opdracht mislukt. Controleer of het scherm aanstaat, bereikbaar is en HomeLink mag verbinden.'
+                    };
+                    const text = messages[msg.status];
+                    if (device && text) showDeviceFeedback(device.id, text);
+                    if (text && currentPairingDevice && currentPairingDevice.ip === msg.ip &&
+                        document.getElementById('pairingModal').style.display !== 'none') {
+                        document.getElementById('pairingStatus').textContent = text;
+                    }
                 }
-            } else if (msg.type === 'pairing-result' && currentPairingDevice && currentPairingDevice.ip === msg.ip) {
-                const status = document.getElementById('pairingStatus');
-                if (msg.status === 'waiting_for_pin') status.textContent = 'Voer de code in die op de tv verschijnt.';
-                if (msg.status === 'paired') status.textContent = 'Tv gekoppeld. De verbinding wordt gestart.';
-                if (msg.status === 'pairing_failed') status.textContent = `Koppelen mislukt: ${msg.error || 'onbekende fout'}`;
+            } catch (e) {
+                console.error('WebSocket error:', e);
             }
-        } catch (e) {
-            console.error('WebSocket error:', e);
-        }
-    };
+        };
+    }
+    connectDeviceEvents();
 });
 
 // Global functions for PS5 Games
@@ -2139,7 +2129,7 @@ window.unpairDevice = async (deviceId) => {
         const data = await res.json();
         if (data.ok) {
             alert(window.t ? window.t('data_deleted') : 'Data deleted');
-            fetchDevices(); // Refresh list
+            if (window.refreshDeviceList) window.refreshDeviceList();
             closeDeviceDetail();
         } else {
             alert((window.t ? window.t('delete_failed') : 'Failed to delete: ') + (data.error || ''));
@@ -2203,7 +2193,7 @@ window.showPairingModal = (arg1, arg2) => {
             if (userGroup) userGroup.style.display = 'none';
             if (passGroup) passGroup.style.display = 'none';
             if (pinGroup) pinGroup.style.display = 'none';
-            desc.textContent = 'Start de verbinding en accepteer het verzoek op je Samsung-tv.';
+            desc.textContent = 'Zet je Samsung-tv of -monitor aan, start de verbinding en kies Toestaan op het scherm als daarom wordt gevraagd.';
         } else if (currentPairingDevice.protocol === 'mdns-googlecast') {
             if (userGroup) userGroup.style.display = 'none';
             if (passGroup) passGroup.style.display = 'none';
@@ -2286,7 +2276,7 @@ window.submitPairing = async () => {
     const btn = document.querySelector('#pairingModal .btn-primary');
     const originalText = btn.textContent;
     const status = document.getElementById('pairingStatus');
-    status.textContent = '';
+    status.textContent = 'Verbinding wordt gestart...';
     btn.textContent = 'Verbinden...';
     btn.disabled = true;
 
@@ -2315,9 +2305,11 @@ window.submitPairing = async () => {
 
         if (data.ok) {
             if (currentPairingDevice && ['samsung-tizen', 'mdns-googlecast'].includes(currentPairingDevice.protocol)) {
-                status.textContent = currentPairingDevice.protocol === 'samsung-tizen'
-                    ? 'Verbindingsverzoek gestart. Bevestig dit op je tv.'
-                    : 'Code verzonden. Controleer op je tv of de koppeling is gelukt.';
+                if (currentPairingDevice.protocol !== 'samsung-tizen' || status.textContent === 'Verbinding wordt gestart...') {
+                    status.textContent = currentPairingDevice.protocol === 'samsung-tizen'
+                        ? 'Verbindingsverzoek gestart. Kies zo nodig Toestaan op je scherm.'
+                        : 'Code verzonden. Controleer op je tv of de koppeling is gelukt.';
+                }
             } else {
                 status.textContent = 'Gegevens opgeslagen. Controleer de verbinding bij het apparaat.';
             }

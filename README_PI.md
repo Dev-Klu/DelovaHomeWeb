@@ -57,6 +57,9 @@ zijn IP-adres toevoegen en vervolgens koppeling vanuit de bediening starten.
 Bij Samsung moet de gebruiker het verzoek op de tv bevestigen; bij Android TV
 wordt een code gevraagd. Niet alle TCL-tv's gebruiken Android TV; andere
 platforms zoals Roku zijn hiermee niet automatisch ondersteund.
+Zet bij Yeelight-lampen eerst LAN Control aan in de Yeelight-app. HomeLink
+meldt of de lamp een opdracht bevestigt; bereikbaarheid hangt ook af van de
+netwerkroute en de instellingen van de lamp.
 
 Voor Proximus moet de Ubuntu-server een werkende route naar
 `192.168.0.0/24` hebben. Bij Tailscale moet de subnetrouter die route

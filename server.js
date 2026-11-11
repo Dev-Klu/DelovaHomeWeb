@@ -22,6 +22,7 @@ const { exec } = require('child_process');
 const db = require('./script/db');
 const registerLocalUser = require('./script/registerLocalUser');
 const isPrivateStaticPath = require('./script/staticPrivacy');
+const { isYeelight } = require('./script/yeelightControl');
 const nasManager = require('./script/nasManager');
 const cameraStreamManager = require('./script/cameraStream');
 const knxManager = require('./script/knxManager');
@@ -2022,7 +2023,18 @@ app.post('/api/devices/:id/command', async (req, res) => {
 
     // console.log(`Received command for ${id}: ${command} = ${value}`);
 
-    // Fire and forget for faster UI response
+    const device = deviceManager.getDevice(id);
+    if (device && !['hue', 'mqtt'].includes(device.protocol) && isYeelight(device)) {
+        try {
+            await deviceManager.controlDevice(id, command, value);
+            return res.json({ ok: true, confirmed: true });
+        } catch (error) {
+            console.error('[Yeelight] Command failed:', error.message);
+            return res.status(502).json({ ok: false, message: error.message });
+        }
+    }
+
+    // Other integrations do not yet all report command completion.
     deviceManager.controlDevice(id, command, value).catch(e => console.error('Control error:', e));
     
     res.json({ ok: true });
@@ -2058,7 +2070,7 @@ function registerManualTv(record) {
         deviceManager.addDevice({
             id, ip: record.ip, type: 'tv', protocol,
             name: record.alias || record.hostname || `TV (${record.ip})`,
-            state: { on: false }
+            state: { on: null }
         });
         device = deviceManager.getDevice(id);
     }
@@ -2521,6 +2533,9 @@ deviceManager.on('pairing-required', (data) => {
 });
 deviceManager.on('pairing-result', (data) => {
     broadcast({ type: 'pairing-result', ...data });
+});
+deviceManager.on('device-connection', (data) => {
+    broadcast({ type: 'device-connection', ...data });
 });
 
 // Listen for device updates and broadcast them

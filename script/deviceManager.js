@@ -2,6 +2,7 @@ const EventEmitter = require('events');
 const fetch = require('node-fetch');
 const https = require('https');
 const net = require('net');
+const { isYeelight, sendYeelightCommand, getYeelightState } = require('./yeelightControl');
 const dgram = require('dgram');
 const fs = require('fs');
 const path = require('path');
@@ -1691,48 +1692,20 @@ class DeviceManager extends EventEmitter {
             process.stdin.write(JSON.stringify({ command: 'status' }) + '\n');
             
             // Output is handled in getAtvProcess
-        } else if (device.type === 'light' && (device.name.toLowerCase().includes('yeelight') || device.name.toLowerCase().includes('ylbulb'))) {
-            // Refresh Yeelight
-            const socket = new net.Socket();
-            const id = 2; // Request ID for status
-            const msg = { id, method: 'get_prop', params: ['power', 'bright'] };
-            
-            socket.setTimeout(2000);
-            socket.connect(55443, device.ip, () => {
-                socket.write(JSON.stringify(msg) + '\r\n');
-            });
-
-            socket.on('data', (data) => {
-                try {
-                    const response = JSON.parse(data.toString());
-                    if (response.id === id && response.result) {
-                        const [power, bright] = response.result;
-                        let updated = false;
-                        
-                        const isOn = power === 'on';
-                        if (device.state.on !== isOn) {
-                            device.state.on = isOn;
-                            updated = true;
-                        }
-                        
-                        const brightness = parseInt(bright);
-                        if (device.state.brightness !== brightness) {
-                            device.state.brightness = brightness;
-                            updated = true;
-                        }
-
-                        if (updated) {
-                            this.emit('device-updated', device);
-                        }
-                    }
-                } catch (e) {
-                    // console.error('Error parsing Yeelight status:', e);
+        } else if (device.type === 'light' && isYeelight(device)) {
+            try {
+                const state = await getYeelightState(device.ip, { timeout: 2000 });
+                if (device.state.on !== state.on || device.state.brightness !== state.brightness) {
+                    Object.assign(device.state, state);
+                    this.emit('device-updated', device);
                 }
-                socket.destroy();
-            });
-
-            socket.on('error', () => socket.destroy());
-            socket.on('timeout', () => socket.destroy());
+            } catch (error) {
+                if (device.state.on !== null) {
+                    console.warn(`[Yeelight] Status unavailable for ${device.ip}:`, error.message);
+                    device.state.on = null;
+                    this.emit('device-updated', device);
+                }
+            }
         } else if (device.type === 'chromecast' || device.protocol === 'mdns-googlecast') {
             // Refresh Cast Device
             const client = new CastClient();
@@ -1810,9 +1783,9 @@ class DeviceManager extends EventEmitter {
                         // Secure failed, try insecure
                         checkPower(8001);
                     } else {
-                        // Both failed, device is off
-                        if (device.state.on) {
-                            device.state.on = false;
+                        // Failure to reach the remote port does not prove that the screen is off.
+                        if (device.state.on !== null) {
+                            device.state.on = null;
                             this.emit('device-updated', device);
                         }
                     }
@@ -2238,6 +2211,18 @@ class DeviceManager extends EventEmitter {
             }
         }
 
+        if (isYeelight(device)) {
+            await sendYeelightCommand(device.ip, command, value);
+            setTimeout(() => this.refreshDevice(device.id).catch(error =>
+                console.error(`[Yeelight] Status refresh failed for ${device.ip}:`, error.message)), 700);
+            return device;
+        }
+
+        if (device.protocol === 'samsung-tizen') {
+            await this.handleSamsungCommand(device, command, value);
+            return device;
+        }
+
         // Check if this device is the active Spotify device
         // If so, route media/volume commands to Spotify
         try {
@@ -2391,12 +2376,8 @@ class DeviceManager extends EventEmitter {
             this.handleShellyCommand(device, command, value);
         } else if (device.name.toLowerCase().includes('dali') || device.name.toLowerCase().includes('deli')) {
             this.handleDaliCommand(device, command, value);
-        } else if (device.name.toLowerCase().includes('ylbulb') || device.name.toLowerCase().includes('yeelight')) {
-            this.handleYeelightCommand(device, command, value);
         } else if (device.protocol === 'lg-webos') {
             this.handleLgCommand(device, command, value);
-        } else if (device.protocol === 'samsung-tizen') {
-            this.handleSamsungCommand(device, command, value);
         } else if (device.protocol === 'mdns-airplay') {
             this.handleAirPlayCommand(device, command, value);
         } else if (device.protocol === 'denon-avr') {
@@ -3011,7 +2992,13 @@ class DeviceManager extends EventEmitter {
         console.log(`[Samsung] Handling command '${command}' for ${device.name}`);
 
         if (command === 'pair') {
-            this.getSamsungProcess(device.ip);
+            const process = this.getSamsungProcess(device.ip);
+            if (process.homelinkConnected) this.emit('device-connection', { ip: device.ip, status: 'connected' });
+            else if (!process.homelinkConnecting) {
+                process.homelinkConnecting = true;
+                this.emit('device-connection', { ip: device.ip, status: 'connecting' });
+                process.stdin.write(JSON.stringify({ command: 'connect' }) + '\n');
+            }
             return;
         }
 
@@ -3056,7 +3043,7 @@ class DeviceManager extends EventEmitter {
 
                 // Send launch_app command to python service
                 const payload = {
-                    method: 'launch_app',
+                    command: 'launch_app',
                     app_id: value
                 };
                 process.stdin.write(JSON.stringify(payload) + '\n');
@@ -3073,7 +3060,7 @@ class DeviceManager extends EventEmitter {
             'turn_off': 'KEY_POWEROFF', 'toggle': 'KEY_POWER', // Use KEY_POWER for toggle to avoid accidental shutdown during pairing
             'turn_on': 'KEY_POWERON',
             'channel_up': 'KEY_CHUP', 'channel_down': 'KEY_CHDOWN',
-            'volume_up': 'KEY_VOLUP', 'volume_down': 'KEY_VOLDOWN',
+            'volume_up': 'KEY_VOLUP', 'volume_down': 'KEY_VOLDOWN', 'mute': 'KEY_MUTE',
             'play': 'KEY_PLAY', 'pause': 'KEY_PAUSE', 'stop': 'KEY_STOP',
             'next': 'KEY_FF', 'previous': 'KEY_REWIND',
             'up': 'KEY_UP', 'down': 'KEY_DOWN', 'left': 'KEY_LEFT', 'right': 'KEY_RIGHT',
@@ -3089,14 +3076,14 @@ class DeviceManager extends EventEmitter {
         
         // This library doesn't have a reliable power on method, so we still use WoL
         if (command === 'turn_on') {
-            const mac = await this.getMacAddress(device.ip);
+            const mac = device.mac || await this.getMacAddress(device.ip);
             if (mac) {
                 console.log(`[Samsung] Sending WoL to ${mac}`);
                 this.sendWol(mac);
-                device.state.on = true;
-                this.emit('device-updated', device);
+                this.emit('device-connection', { ip: device.ip, status: 'wake_sent' });
             } else {
                 console.log(`[Samsung] Could not resolve MAC for WoL for ${device.ip}`);
+                this.emit('device-connection', { ip: device.ip, status: 'wake_failed' });
             }
             // Even if we sent WoL, try sending KEY_POWERON via legacy if it's legacy
             if (this.legacySamsungDevices.has(device.ip)) {
@@ -3154,10 +3141,6 @@ class DeviceManager extends EventEmitter {
                 await this.sendSamsungKeyPython(device, key);
                 console.log(`[Samsung] Python method: sent '${key}' to ${device.name}`);
                 
-                if (key === 'KEY_POWEROFF' || key === 'KEY_POWER') {
-                    device.state.on = false;
-                    this.emit('device-updated', device);
-                }
                 return;
             } catch (e) {
                 console.warn(`[Samsung] Python method failed for '${key}', trying legacy fallback:`, e.message);
@@ -3187,10 +3170,6 @@ class DeviceManager extends EventEmitter {
                 });
                 
                 console.log(`[Samsung] Legacy method: Successfully sent command '${key}' to ${device.name}`);
-                if (key === 'KEY_POWEROFF' || key === 'KEY_POWER') {
-                    device.state.on = false;
-                    this.emit('device-updated', device);
-                }
                 legacySuccess = true;
                 return; 
             } catch (e) {
@@ -3259,43 +3238,57 @@ class DeviceManager extends EventEmitter {
         
         console.log(`[DeviceManager] Spawning: ${pythonPath} ${scriptPath} ${ip}`);
         const childProc = spawn(pythonPath, [scriptPath, ip]);
+        childProc.homelinkConnecting = true;
+        this.emit('device-connection', { ip, status: 'connecting' });
 
         childProc.stderr.on('data', (data) => {
             console.error(`[Samsung Service ERROR] ${ip}: ${data.toString()}`);
         });
         
-        childProc.stdout.on('data', (data) => {
-             // Increase listeners limit if needed or clean up properly
-            if (childProc.stdout.getMaxListeners() < 20) childProc.stdout.setMaxListeners(20);
-
-            const lines = data.toString().split('\n');
-            lines.forEach(line => {
-                if (!line.trim()) return;
-                try {
-                    const msg = JSON.parse(line);
-                    if (msg.status === 'connected') {
-                        console.log(`[Samsung Service] Connected to ${ip} (Port: ${msg.port || 'unknown'})`);
-                    } else if (msg.status === 'sent') {
-                        console.log(`[Samsung Service] Successfully sent '${msg.key}' to ${ip}`);
-                    } else if (msg.status === 'debug') {
-                        console.log(`[Samsung Debug] ${msg.message}`);
-                    } else if (msg.error === 'legacy_detected') {
-                        console.log(`[Samsung Service] Legacy TV detected at ${ip}. Switching to legacy protocol.`);
-                        this.legacySamsungDevices.add(ip);
-                    } else if (msg.error) {
-                        console.error(`[Samsung Service Error] ${ip}: ${msg.error}`);
-                    }
-                } catch (e) {}
-            });
+        const lines = require('readline').createInterface({ input: childProc.stdout });
+        lines.on('line', line => {
+            if (!line.trim()) return;
+            let msg;
+            try {
+                msg = JSON.parse(line);
+            } catch (error) {
+                console.error(`[Samsung Service] Invalid response for ${ip}:`, error.message);
+                return;
+            }
+            if (msg.status === 'connected') {
+                childProc.homelinkConnected = true;
+                childProc.homelinkConnecting = false;
+                this.emit('device-connection', { ip, status: 'connected' });
+            } else if (msg.status === 'sent') {
+                this.emit('device-connection', { ip, status: 'sent' });
+            } else if (msg.error === 'legacy_detected') {
+                this.legacySamsungDevices.add(ip);
+                childProc.homelinkConnecting = false;
+                this.emit('device-connection', { ip, status: 'failed' });
+            } else if (msg.status === 'failed' || msg.error) {
+                childProc.homelinkConnected = false;
+                childProc.homelinkConnecting = false;
+                this.emit('device-connection', { ip, status: 'failed' });
+                console.error(`[Samsung Service Error] ${ip}: ${msg.error || msg.reason || 'Command failed'}`);
+            } else if (msg.status === 'debug') {
+                console.log(`[Samsung Debug] ${msg.message}`);
+            }
         });
-
-        childProc.stderr.on('data', (data) => {
-            // console.error(`[Samsung Service Stderr] ${ip}: ${data}`);
+        childProc.on('error', error => {
+            console.error(`[Samsung Service] Could not start for ${ip}:`, error.message);
+            this.emit('device-connection', { ip, status: 'failed' });
+        });
+        childProc.stdin.on('error', error => {
+            console.error(`[Samsung Service] Could not send command to ${ip}:`, error.message);
+            this.emit('device-connection', { ip, status: 'failed' });
         });
 
         childProc.on('close', (code) => {
             console.log(`[Samsung Service] Process for ${ip} exited with code ${code}`);
-            this.samsungProcesses.delete(ip);
+            if (this.samsungProcesses.get(ip) === childProc) {
+                this.samsungProcesses.delete(ip);
+                if (code !== 0) this.emit('device-connection', { ip, status: 'failed' });
+            }
         });
 
         this.samsungProcesses.set(ip, childProc);
@@ -3768,45 +3761,6 @@ class DeviceManager extends EventEmitter {
                 // console.log('STDERR: ' + data);
             });
         });
-    }
-
-    handleYeelightCommand(device, command, value) {
-        const socket = new net.Socket();
-        const id = 1; // Request ID
-        let msg = null;
-
-        if (command === 'toggle') {
-             msg = { id, method: 'toggle', params: [] };
-        } else if (command === 'turn_on') {
-             msg = { id, method: 'set_power', params: ['on', 'smooth', 500] };
-        } else if (command === 'turn_off') {
-             msg = { id, method: 'set_power', params: ['off', 'smooth', 500] };
-        } else if (command === 'set_brightness') {
-             msg = { id, method: 'set_bright', params: [parseInt(value), 'smooth', 500] };
-        } else if (command === 'set_color') {
-             // Value is {r, g, b}
-             // Convert to integer: R*65536 + G*256 + B
-             let rgb = 0;
-             if (typeof value === 'object') {
-                 rgb = (value.r << 16) + (value.g << 8) + value.b;
-             } else {
-                 rgb = parseInt(value);
-             }
-             msg = { id, method: 'set_rgb', params: [rgb, 'smooth', 500] };
-        }
-
-        if (msg) {
-            socket.connect(55443, device.ip, () => {
-                socket.write(JSON.stringify(msg) + '\r\n');
-                socket.end();
-            });
-            socket.on('error', (err) => {
-                console.error('Yeelight error:', err.message);
-                if (err.code === 'ECONNREFUSED') {
-                    console.warn('⚠️  HINT: Zorg ervoor dat "LAN Control" is ingeschakeld in de Yeelight app voor dit apparaat.');
-                }
-            });
-        }
     }
 
     handleDenonCommand(device, command, value) {

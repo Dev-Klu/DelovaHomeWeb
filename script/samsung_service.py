@@ -107,6 +107,21 @@ def main():
                 continue
 
             command = cmd_data.get('command')
+
+            if command == 'connect':
+                connect()
+                continue
+
+            if command == 'launch_app':
+                if not tv and not connect():
+                    print(json.dumps({"status": "failed", "reason": "connection_failed"}), flush=True)
+                    continue
+                try:
+                    tv.run_app(cmd_data['app_id'])
+                    print(json.dumps({"status": "sent"}), flush=True)
+                except Exception as e:
+                    print(json.dumps({"status": "failed", "reason": str(e)}), flush=True)
+                continue
             
             if command == 'key':
                 key = cmd_data.get('value')
