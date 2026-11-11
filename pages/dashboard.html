@@ -1,39 +1,109 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - DelovaHome</title>
+    <title>Dashboard - HomeLink</title>
     <link rel="stylesheet" href="../style/base.css">
-    <script>/* Prevent white flash */(function(){var t=localStorage.getItem('theme');if(t==='dark'){document.documentElement.style.background='#0f172a';document.documentElement.style.color='#f8fafc';if(document.body)document.body.style.background='#0f172a';}else{document.documentElement.style.background='#f8fafc';document.documentElement.style.color='#1e293b';if(document.body)document.body.style.background='#f8fafc';}})();</script>
-    <script>(function(){var theme=localStorage.getItem('theme');var href=(theme==='dark'?'../style/style-dark.css':'../style/style.css');var l=document.createElement('link');l.rel='stylesheet';l.id='theme-stylesheet';l.href=href;document.head.appendChild(l);})();</script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script>(function(){var theme=localStorage.getItem('theme')||'dark';var href=(theme==='dark'?'../style/style-dark.css':'../style/style.css');var l=document.createElement('link');l.rel='stylesheet';l.id='theme-stylesheet';l.href=href;document.head.appendChild(l);})();</script>
+    <script src="../script/homelink-boot.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="../style/homelink.css">
 </head>
 <body>
     <div class="app-container">
-        <!-- Main Nav (dynamically loaded by script.js, but we'll add a placeholder if needed or let script do it) -->
         <nav class="main-nav"></nav>
 
         <main class="content-area">
-            <header class="page-header">
-                <div class="header-content">
-                    <div>
-                        <h2 data-i18n="dashboard">Dashboard</h2>
-                        <p data-i18n="dashboard_subtitle">Overzicht van kamers, apparaten en handige widgets</p>
-                    </div>
+            <!-- Hero -->
+            <header class="hl-hero hl-rise">
+                <div>
+                    <span class="hl-eyebrow"><i class="fas fa-circle-nodes"></i> HomeLink Control Center</span>
+                    <h2 id="hlGreeting">Welkom thuis</h2>
+                    <p id="hlSubtitle">Alle netwerken, servers en slimme apparaten in &eacute;&eacute;n overzicht.</p>
+                </div>
+                <div class="hl-hero-tools">
+                    <span class="hl-pill" id="hlHealthPill"><span class="hl-dot"></span><span>Systeem controleren...</span></span>
                     <div class="ai-assistant">
-                        <input type="text" id="aiInput" placeholder="Ask DelovaHome..." data-i18n="ask_ai" />
+                        <input type="text" id="aiInput" placeholder="Vraag HomeLink..." data-i18n="ask_ai" />
                         <button id="aiMic" class="btn-icon" title="Voice Command"><i class="fas fa-microphone"></i></button>
-                        <button id="aiSubmit" class="btn-icon"><i class="fas fa-magic"></i></button>
+                        <button id="aiSubmit" class="btn-icon" title="Uitvoeren"><i class="fas fa-magic"></i></button>
                     </div>
                 </div>
             </header>
-            
-            <!-- Scenes Bar -->
+
+            <!-- KPI strip -->
+            <section class="hl-kpis" id="hlKpis" aria-label="Samenvatting">
+                <div class="hl-kpi hl-skeleton" style="height:76px"></div>
+                <div class="hl-kpi hl-skeleton" style="height:76px"></div>
+                <div class="hl-kpi hl-skeleton" style="height:76px"></div>
+                <div class="hl-kpi hl-skeleton" style="height:76px"></div>
+                <div class="hl-kpi hl-skeleton" style="height:76px"></div>
+            </section>
+
+            <!-- Scenes -->
             <div id="scenesBar" class="scenes-bar"></div>
 
+            <!-- Network + security -->
+            <section class="hl-grid cols-2-1">
+                <article class="hl-panel hl-rise" style="--i:2">
+                    <div class="hl-panel-head">
+                        <h3 class="hl-panel-title"><i class="fas fa-diagram-project"></i> Netwerktopologie</h3>
+                        <a class="hl-link" href="network.html">Netwerkbeheer <i class="fas fa-arrow-right"></i></a>
+                    </div>
+                    <div id="hlTopology"><div class="hl-skeleton" style="height:300px"></div></div>
+                </article>
+
+                <div style="display:grid; gap:18px; align-content:start; min-width:0">
+                    <article class="hl-panel hl-rise" style="--i:3">
+                        <div class="hl-panel-head">
+                            <h3 class="hl-panel-title"><i class="fas fa-shield-halved"></i> Beveiliging</h3>
+                        </div>
+                        <div id="hlSecurity"><div class="hl-skeleton" style="height:84px"></div></div>
+                    </article>
+                    <article class="hl-panel hl-rise" style="--i:4">
+                        <div class="hl-panel-head">
+                            <h3 class="hl-panel-title"><i class="fas fa-server"></i> NAS &amp; servers</h3>
+                            <a class="hl-link" id="hlNasLink" href="files.html">Bestanden</a>
+                        </div>
+                        <div id="hlNas"><div class="hl-skeleton" style="height:84px"></div></div>
+                    </article>
+                </div>
+            </section>
+
+            <!-- Devices + Tailscale + Automations -->
+            <section class="hl-grid cols-2-1">
+                <article class="hl-panel hl-rise" style="--i:5">
+                    <div class="hl-panel-head">
+                        <h3 class="hl-panel-title"><i class="fas fa-network-wired"></i> Gedetecteerde apparaten</h3>
+                        <div style="display:flex; gap:8px; align-items:center">
+                            <span id="hlScanState" class="hl-mono"></span>
+                            <button id="hlScanBtn" class="hl-btn-sm"><i class="fas fa-rotate"></i> Scan netwerk</button>
+                        </div>
+                    </div>
+                    <div class="hl-table-wrap" id="hlDevices"><div class="hl-skeleton" style="height:180px"></div></div>
+                </article>
+
+                <div style="display:grid; gap:18px; align-content:start; min-width:0">
+                    <article class="hl-panel hl-rise" style="--i:6">
+                        <div class="hl-panel-head">
+                            <h3 class="hl-panel-title"><i class="fas fa-shield-cat"></i> Tailscale</h3>
+                        </div>
+                        <div id="hlTailscale"><div class="hl-skeleton" style="height:84px"></div></div>
+                    </article>
+                    <article class="hl-panel hl-rise" style="--i:7">
+                        <div class="hl-panel-head">
+                            <h3 class="hl-panel-title"><i class="fas fa-wand-magic-sparkles"></i> Automatiseringen</h3>
+                            <a class="hl-link" href="automations.html">Beheren</a>
+                        </div>
+                        <div id="hlAutomations"><div class="hl-skeleton" style="height:84px"></div></div>
+                    </article>
+                </div>
+            </section>
+
+            <!-- Smart home (existing DelovaHome functionality) -->
+            <h3 class="hl-section-title"><i class="fas fa-house-signal"></i> Slimme woning</h3>
             <div class="dashboard-layout">
-                <!-- Left Column: Rooms -->
                 <div class="rooms-section">
                    <div id="quickStartCard" class="unified-card quick-start-card" style="display: none; margin-bottom: 20px;">
                         <div class="unified-card-header">
@@ -49,14 +119,12 @@
                             <button id="quickStartRoomsBtn" class="btn btn-secondary" data-i18n="quick_start_rooms">Open Rooms</button>
                         </div>
                    </div>
-                   <div id="roomsList" class="unified-grid">
+                   <div id="roomsList" class="unified-grid" style="margin-top:0">
                         <!-- Loaded via JS -->
                    </div>
                 </div>
 
-                <!-- Right Column: Widgets -->
                 <aside class="widgets-panel" style="display: flex; flex-direction: column; gap: 20px;">
-                    <!-- Clock Widget -->
                     <div class="unified-card widget" id="clockWidget">
                         <div class="clock-display" style="text-align:center; padding:10px;">
                              <div class="clock-time" id="clockTime" style="font-size: 2.5em; font-weight:800;">--:--</div>
@@ -64,7 +132,6 @@
                         </div>
                     </div>
 
-                    <!-- Presence Widget -->
                     <div class="unified-card widget" id="presenceWidget">
                         <div class="unified-card-header">
                             <h4><i class="fas fa-user-friends"></i> <span data-i18n="presence">Presence</span></h4>
@@ -72,15 +139,13 @@
                         <div id="presenceContent" data-i18n="loading">Loading...</div>
                     </div>
 
-                    <!-- Energy Widget -->
                     <div class="unified-card widget" id="energyWidget">
                          <div class="unified-card-header">
                             <h4><i class="fas fa-bolt"></i> <span data-i18n="energy">Energy</span></h4>
                          </div>
                         <div id="energyContent" data-i18n="loading">Loading...</div>
                     </div>
-                    
-                    <!-- Weather Widget -->
+
                     <div class="unified-card widget" id="weatherWidget">
                          <div class="unified-card-header">
                             <h4><span data-i18n="weather">Weather</span></h4>
@@ -88,12 +153,8 @@
                         <div id="weatherContent" class="weather-container" data-i18n="loading">Loading...</div>
                     </div>
 
-                    <!-- Spotify Widget -->
                     <div id="spotify-widget-container"></div>
-
-                    <!-- Sonos Widget -->
                     <div id="sonos-widget-container"></div>
-
                 </aside>
             </div>
         </main>
@@ -108,16 +169,14 @@
             </div>
             <div class="modal-body">
                 <div class="form-group" style="position: relative;">
-                     <!-- Using autocomplete="off" and name="weather_search_unique" to avoid browser prompts/autofills -->
-                    <input type="text" id="weatherSearchInput" 
-                           placeholder="Zoek stad..." 
-                           autocomplete="off" 
+                    <input type="text" id="weatherSearchInput"
+                           placeholder="Zoek stad..."
+                           autocomplete="off"
                            name="weather_search_unique"
                            class="weather-search-input"
-                           placeholder="Zoek stad..." 
                            style="width: 100%;">
-                    
-                    <div id="weatherSearchResults" 
+
+                    <div id="weatherSearchResults"
                          className="weather-search-dropdown"
                          style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--card, #fff); border: 1px solid var(--border, #ccc); border-radius: 8px; z-index: 2001; max-height: 200px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 5px;">
                     </div>
@@ -139,5 +198,7 @@
     <script src="../script/animations.js"></script>
     <script src="../script/jsmpeg.min.js"></script>
     <script src="../script/setupWizard.js"></script>
+    <script src="../script/homelink-ui.js"></script>
+    <script src="../script/homelink-dashboard.js"></script>
 </body>
 </html>

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Netwerk - HomeLink</title>
+    <link rel="stylesheet" href="../style/base.css">
+    <script>(function(){var theme=localStorage.getItem('theme')||'dark';var href=(theme==='dark'?'../style/style-dark.css':'../style/style.css');var l=document.createElement('link');l.rel='stylesheet';l.id='theme-stylesheet';l.href=href;document.head.appendChild(l);})();</script>
+    <script src="../script/homelink-boot.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="../style/homelink.css">
+</head>
+<body>
+    <div class="app-container">
+        <nav class="main-nav"></nav>
+
+        <main class="content-area">
+            <header class="hl-hero hl-rise">
+                <div>
+                    <span class="hl-eyebrow"><i class="fas fa-network-wired"></i> Netwerkbeheer</span>
+                    <h2>Starlink <span>&amp;</span> Proximus</h2>
+                    <p>Automatische apparaatdetectie en monitoring van beide netwerken, verbonden via Tailscale.</p>
+                </div>
+                <div class="hl-hero-tools">
+                    <span class="hl-pill" id="nwUpdated"><span class="hl-dot"></span><span>Laden…</span></span>
+                    <button id="nwScan"><i class="fas fa-rotate"></i> Scan alle netwerken</button>
+                </div>
+            </header>
+
+            <section class="hl-grid cols-2-1">
+                <article class="hl-panel hl-rise" style="--i:1">
+                    <div class="hl-panel-head"><h3 class="hl-panel-title"><i class="fas fa-diagram-project"></i> Topologie</h3></div>
+                    <div id="nwTopology"><div class="hl-skeleton" style="height:300px"></div></div>
+                </article>
+                <div id="nwCards" style="display:grid; gap:18px; align-content:start; min-width:0"></div>
+            </section>
+
+            <article class="hl-panel hl-rise" style="--i:3; margin-bottom:18px">
+                <div class="hl-panel-head">
+                    <h3 class="hl-panel-title"><i class="fas fa-laptop-house"></i> Apparaten</h3>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+                        <input type="search" id="nwSearch" placeholder="Zoek op naam, IP of MAC…" style="min-width:220px; padding:8px 12px">
+                        <div class="hl-tabs" id="nwTabs"></div>
+                    </div>
+                </div>
+                <div class="hl-table-wrap" id="nwDevices"><div class="hl-skeleton" style="height:200px"></div></div>
+            </article>
+
+            <article class="hl-panel hl-rise" style="--i:4" id="tailscale">
+                <div class="hl-panel-head"><h3 class="hl-panel-title"><i class="fas fa-shield-halved"></i> Tailscale – toegang op afstand</h3><span class="hl-mono" id="nwTailnet"></span></div>
+                <div class="hl-table-wrap" id="nwTailscale"><div class="hl-skeleton" style="height:120px"></div></div>
+            </article>
+        </main>
+    </div>
+
+    <script src="../script/script.js"></script>
+    <script src="../script/i18n.js"></script>
+    <script src="../script/homelink-ui.js"></script>
+    <script src="../script/network.js"></script>
+</body>
+</html>

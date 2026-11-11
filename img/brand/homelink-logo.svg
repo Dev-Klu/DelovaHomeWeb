@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 120" width="460" height="120" role="img" aria-label="HomeLink">
+  <defs>
+    <linearGradient id="g" x1="8" y1="8" x2="112" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#6366f1"/><stop offset="1" stop-color="#a855f7"/>
+    </linearGradient>
+    <linearGradient id="t" x1="250" y1="0" x2="440" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22d3ee"/><stop offset=".6" stop-color="#6366f1"/><stop offset="1" stop-color="#a855f7"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="112" height="112" rx="30" fill="#0a1024"/>
+  <g fill="none" stroke="url(#g)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M26 60 L60 30 L94 60"/>
+    <path d="M38 56 V88 Q38 94 44 94 H76 Q82 94 82 88 V56"/>
+  </g>
+  <path d="M47.3 67.3 A18 18 0 0 1 72.7 67.3" fill="none" stroke="#67e8f9" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="60" cy="80" r="5" fill="#67e8f9"/>
+  <circle cx="60" cy="30" r="7" fill="#fff"/>
+  <text x="140" y="78" font-family="Inter,'Segoe UI',system-ui,sans-serif" font-size="58" letter-spacing="-2">
+    <tspan font-weight="300" fill="#0f172a">Home</tspan><tspan font-weight="800" fill="url(#t)">Link</tspan>
+  </text>
+  <text x="143" y="102" font-family="Inter,'Segoe UI',system-ui,sans-serif" font-size="11" font-weight="600" letter-spacing="4.2" fill="#64748b">SMART HOME &#183; NETWORK &#183; NAS</text>
+</svg>

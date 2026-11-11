@@ -51,6 +51,7 @@ const discoveryService = require('./script/discoveryService');
 const cloudClient = require('./script/cloudClient');
 const dynamicIpManager = require('./script/dynamicIpManager');
 const systemMonitor = require('./script/systemMonitor');
+const networkManager = require('./script/networkManager');
 const WebSocket = require('ws');
 const url = require('url');
 const fs = require('fs');
@@ -445,6 +446,9 @@ const requireAdmin = (req, res, next) => {
 };
 
 app.use(authenticate);
+
+// Never serve the network inventory / config as static files
+app.use(/^\/data\/network/i, (req, res) => res.sendStatus(404));
 
 // Serve static files from project root with caching strategy
 app.use(express.static(__dirname, {
@@ -2041,6 +2045,24 @@ app.post('/api/ai/command', async (req, res) => {
     }
 });
 
+// --- Network (HomeLink) API ---
+app.get('/api/network/overview', requireAuth, (req, res) => {
+    res.json(networkManager.getOverview());
+});
+
+app.post('/api/network/scan', requireAdmin, (req, res) => {
+    const { network } = req.body || {};
+    if (network && !networkManager.networks[network]) return res.status(404).json({ ok: false, message: 'Unknown network' });
+    (network ? networkManager.scanNetwork(network) : networkManager.scanAll()).catch(() => {});
+    res.json({ ok: true });
+});
+
+app.post('/api/network/devices/rename', requireAdmin, (req, res) => {
+    const { key, name } = req.body || {};
+    if (typeof key !== 'string' || !networkManager.renameDevice(key, name)) return res.status(404).json({ ok: false, message: 'Device not found' });
+    res.json({ ok: true });
+});
+
 // --- Presence ---
 app.get('/api/presence', (req, res) => {
     res.json(presenceManager.getPresenceStatus());
@@ -3018,6 +3040,13 @@ udpServer.bind(8888, () => {
 
     // Start System Monitor (Self-Monitoring)
     systemMonitor.start();
+
+    // Start Network Monitor (Starlink / Proximus / Tailscale)
+    networkManager.setProviders({
+        devices: () => deviceManager.getAllDevices(),
+        nas: () => nasManager.getNasList()
+    });
+    networkManager.start();
 
     // Start Notification Listeners
     /* Notification logic moved to line 2490 to group with device updates */

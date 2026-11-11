@@ -91,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         themeStylesheet.href = '../style/style.css';
                         localStorage.setItem('theme', 'light');
                     }
+                    if (window.hlApplyTheme) window.hlApplyTheme();
                 });
             }
         }
@@ -340,6 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
             { key: 'dashboard', name: 'Dashboard', icon: 'fas fa-home', href: 'dashboard.html' },
             { key: 'rooms', name: 'Kamers', icon: 'fas fa-door-open', href: 'rooms.html' },
             { key: 'devices', name: 'Apparaten', icon: 'fas fa-laptop-house', href: 'devices.html' },
+            { key: 'network', name: 'Netwerk', icon: 'fas fa-network-wired', href: 'network.html' },
             { key: 'floorplan', name: 'Floorplan', icon: 'fas fa-map-marked-alt', href: 'floorplan.html' },
             { key: 'energy', name: 'Energy', icon: 'fas fa-bolt', href: 'energy.html' },
             { key: 'automations', name: 'Automatiseringen', icon: 'fas fa-magic', href: 'automations.html' },
@@ -382,19 +384,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const nav = document.querySelector('.main-nav');
         if (!nav) return;
 
-        // Determine correct Hub Name
+        // Brand is always HomeLink; a custom hub name is shown as the tagline
         const customHubName = localStorage.getItem('hubName');
-        const defaultName = "DelovaHome";
-        
-        // If we have a custom name, don't use i18n tag to avoid conflict
-        const brandHtml = customHubName 
-            ? `<h1>${customHubName}</h1>` 
-            : `<h1 data-i18n="brand_name">${defaultName}</h1>`;
+        const tagline = (customHubName && !/^delovahome$/i.test(customHubName))
+            ? customHubName.replace(/[<>&"']/g, '')
+            : 'Smart home · Network · NAS';
+        const markSrc = (window.location.pathname.includes('/pages/') ? '../' : '') + 'img/brand/homelink-mark.svg';
 
         let html = `
-            <div class="nav-brand">
-                ${brandHtml}
-            </div>
+            <a class="nav-brand hl-brand" href="dashboard.html" aria-label="HomeLink">
+                <img src="${markSrc}" alt="" width="44" height="44">
+                <span class="hl-brand-text">
+                    <span class="hl-wordmark">Home<b>Link</b></span>
+                    <span class="hl-tagline">${tagline}</span>
+                </span>
+            </a>
             <ul>
         `;
 

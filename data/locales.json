@@ -1,6 +1,7 @@
 {
   "en": {
-    "brand_name": "DelovaHome",
+    "brand_name": "HomeLink",
+    "network": "Network",
     "dashboard": "Dashboard",
     "dashboard_subtitle": "Overview of rooms, devices and handy widgets",
     "quick_start_title": "Quick Start",
@@ -45,7 +46,7 @@
     "login": "Login",
     "create_account": "Create Account",
     "back_login": "Back to Login",
-    "welcome": "Welcome to DelovaHome",
+    "welcome": "Welcome to HomeLink",
     "welcome_desc": "Your smart home journey starts here. Let's get you set up in just a few seconds.",
     "get_started": "Get Started",
     "choose_language": "Choose your Language",
@@ -298,7 +299,8 @@
   },
 
   "nl": {
-    "brand_name": "DelovaHome",
+    "brand_name": "HomeLink",
+    "network": "Netwerk",
     "dashboard": "Dashboard",
     "dashboard_subtitle": "Overzicht van kamers, apparaten en handige widgets",
     "quick_start_title": "Snel starten",
@@ -343,7 +345,7 @@
     "login": "Inloggen",
     "create_account": "Maak account",
     "back_login": "Terug naar inloggen",
-    "welcome": "Welkom bij DelovaHome",
+    "welcome": "Welkom bij HomeLink",
     "welcome_desc": "Je smart home start hier. We regelen de basis in een paar seconden.",
     "get_started": "Beginnen",
     "choose_language": "Kies je taal",
