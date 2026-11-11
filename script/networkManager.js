@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const dns = require('dns');
+const net = require('net');
 const { execFile } = require('child_process');
 
 const DATA_DIR = path.join(__dirname, '../data');
@@ -16,6 +17,7 @@ const DEFAULT_CONFIG = {
     healthIntervalMs: 15000,
     scanIntervalMs: 300000,
     pingTimeoutMs: 800,
+    probePorts: [80, 443, 3000, 3001, 6466, 6467, 8001, 8002, 8008],
     historyLength: 60
 };
 
@@ -61,7 +63,9 @@ class NetworkManager {
                 prefix: n.cidr.split('/')[0].split('.').slice(0, 3).join('.') + '.',
                 gateway_status: { online: null, latency: null },
                 history: [],
-                devices: [],
+                devices: Object.entries(this.inventory)
+                    .filter(([, rec]) => rec.network === n.id && rec.ip)
+                    .map(([key, rec]) => this.inventoryDevice(key, rec)),
                 lastScan: null,
                 scanning: false
             };
@@ -177,11 +181,18 @@ class NetworkManager {
         const cmds = process.platform === 'win32' ? [['arp', ['-a']]] : [['ip', ['neigh']], ['arp', ['-an']]];
         for (const [cmd, args] of cmds) {
             const { stdout } = await runCommand(cmd, args, 5000);
-            for (const line of stdout.split(/\r?\n/)) {
-                const m = line.match(/(\d+\.\d+\.\d+\.\d+)\D+?([0-9a-f]{2}(?:[:-][0-9a-f]{2}){5})/i);
-                if (m) table[m[1]] = m[2].toUpperCase().replace(/-/g, ':');
-            }
+            Object.assign(table, this.parseNeighbors(stdout));
             if (Object.keys(table).length) break;
+        }
+        return table;
+    }
+
+    parseNeighbors(output) {
+        const table = {};
+        for (const line of output.split(/\r?\n/)) {
+            const ip = line.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/);
+            const mac = line.match(/\b[0-9a-f]{2}(?:[:-][0-9a-f]{2}){5}\b/i);
+            if (ip && mac && isValidIPv4(ip[0])) table[ip[0]] = mac[0].toUpperCase().replace(/-/g, ':');
         }
         return table;
     }
@@ -196,6 +207,44 @@ class NetworkManager {
         });
     }
 
+    inventoryDevice(key, rec) {
+        return {
+            key, ip: rec.ip, mac: rec.mac || null, vendor: rec.vendor || null,
+            hostname: rec.hostname, name: rec.alias || rec.hostname || rec.ip,
+            latency: null, online: null, linked: false, isGateway: false,
+            isNew: false, firstSeen: rec.firstSeen, lastSeen: rec.lastSeen,
+            openPorts: rec.openPorts || []
+        };
+    }
+
+    probePort(ip, port) {
+        return new Promise(resolve => {
+            const socket = new net.Socket();
+            let finished = false;
+            const finish = open => {
+                if (finished) return;
+                finished = true;
+                socket.destroy();
+                resolve(open ? port : null);
+            };
+            socket.setTimeout(400);
+            socket.once('connect', () => finish(true));
+            socket.once('timeout', () => finish(false));
+            socket.once('error', () => finish(false));
+            socket.connect(port, ip);
+        });
+    }
+
+    async probeHost(ip) {
+        const ports = Array.isArray(this.config.probePorts) ? this.config.probePorts : [];
+        const validPorts = ports.filter(port => Number.isInteger(port) && port > 0 && port <= 65535);
+        const [ping, ...openPorts] = await Promise.all([
+            this.ping(ip, 600),
+            ...validPorts.map(port => this.probePort(ip, port))
+        ]);
+        return { ip, latency: ping.latency, online: ping.online || openPorts.some(Boolean), openPorts: openPorts.filter(Boolean) };
+    }
+
     async scanNetwork(id) {
         const net = this.networks[id];
         if (!net || net.scanning) return net;
@@ -203,10 +252,6 @@ class NetworkManager {
         try {
             const gw = await this.ping(net.gateway, 1500);
             net.gateway_status = gw;
-            if (!gw.online) {
-                net.devices = net.devices.map(d => ({ ...d, online: false }));
-                return net;
-            }
 
             const hosts = [];
             for (let i = 1; i <= 254; i++) hosts.push(net.prefix + i);
@@ -215,21 +260,30 @@ class NetworkManager {
             const worker = async () => {
                 while (cursor < hosts.length) {
                     const ip = hosts[cursor++];
-                    const r = await this.ping(ip, 600);
-                    if (r.online) found.push({ ip, latency: r.latency });
+                    const r = await this.probeHost(ip);
+                    if (r.online) found.push(r);
                 }
             };
-            await Promise.all(Array.from({ length: 48 }, worker));
+            await Promise.all(Array.from({ length: 24 }, worker));
 
             const arp = await this.readArp();
             const known = this.deviceProvider() || [];
             const now = new Date().toISOString();
             const firstScan = Object.keys(this.inventory).length === 0;
             const seen = new Set();
+            const foundIps = new Set(found.map(device => device.ip));
+            known.forEach(device => {
+                const ip = device.ip || device.host || device.address;
+                if (isValidIPv4(ip) && ip.startsWith(net.prefix) && !foundIps.has(ip)) {
+                    foundIps.add(ip);
+                    found.push({ ip, latency: null, online: null, openPorts: [] });
+                }
+            });
 
             const devices = await Promise.all(found.sort((a, b) => this.ipNum(a.ip) - this.ipNum(b.ip)).map(async f => {
                 const mac = arp[f.ip] || null;
-                const key = mac || `${id}:${f.ip}`;
+                const previousKey = Object.keys(this.inventory).find(key => this.inventory[key].network === id && this.inventory[key].ip === f.ip);
+                const key = (mac && this.inventory[mac] ? mac : previousKey) || mac || `${id}:${f.ip}`;
                 seen.add(key);
                 let rec = this.inventory[key];
                 if (!rec) {
@@ -237,11 +291,14 @@ class NetworkManager {
                     rec.isNewSinceInstall = !firstScan;
                 }
                 if (!rec.hostname) rec.hostname = await this.reverseLookup(f.ip);
-                rec.lastSeen = now;
+                if (f.online) rec.lastSeen = now;
                 rec.ip = f.ip;
                 rec.network = id;
+                rec.mac = mac;
+                rec.openPorts = f.openPorts;
                 const linked = known.find(d => (d.ip || d.host || d.address) === f.ip);
                 const vendor = mac ? OUI[mac.slice(0, 8)] || null : null;
+                rec.vendor = vendor;
                 const ageH = (Date.now() - new Date(rec.firstSeen).getTime()) / 3600000;
                 return {
                     key,
@@ -251,23 +308,21 @@ class NetworkManager {
                     hostname: rec.hostname,
                     name: rec.alias || (linked && linked.name) || rec.hostname || vendor || f.ip,
                     latency: f.latency,
-                    online: true,
+                    online: f.online,
                     linked: !!linked,
                     isGateway: f.ip === net.gateway,
                     isNew: !!rec.isNewSinceInstall && ageH < 24,
-                    firstSeen: rec.firstSeen
+                    firstSeen: rec.firstSeen,
+                    lastSeen: rec.lastSeen || null,
+                    openPorts: f.openPorts
                 };
             }));
 
-            // Keep recently known devices as offline entries
+            // A device may ignore probes, so lack of a reply is not proof it is offline.
             const cutoff = Date.now() - 7 * 86400000;
             const offline = Object.entries(this.inventory)
                 .filter(([key, rec]) => rec.network === id && !seen.has(key) && new Date(rec.lastSeen).getTime() > cutoff)
-                .map(([key, rec]) => ({
-                    key, ip: rec.ip, mac: key.includes(':') && !key.includes(id + ':') ? key : null, vendor: null,
-                    hostname: rec.hostname, name: rec.alias || rec.hostname || rec.ip, latency: null, online: false,
-                    linked: false, isGateway: false, isNew: false, firstSeen: rec.firstSeen, lastSeen: rec.lastSeen
-                }));
+                .map(([key, rec]) => this.inventoryDevice(key, rec));
 
             net.devices = devices.concat(offline);
             net.lastScan = Date.now();
@@ -294,8 +349,10 @@ class NetworkManager {
         try {
             if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
             fs.writeFileSync(INVENTORY_PATH, JSON.stringify(this.inventory, null, 2));
+            return true;
         } catch (e) {
             console.error('[Network] Failed to save inventory:', e.message);
+            return false;
         }
     }
 

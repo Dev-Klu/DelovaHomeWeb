@@ -324,11 +324,46 @@ input::placeholder { color: var(--text-muted); opacity: .7; }
 .auth-form label { color: var(--text-muted); font-size: .8rem; font-weight: 600; }
 @media (max-width: 900px) { .hl-auth { grid-template-columns: 1fr; } .hl-auth-stage { display: none; } }
 
+/* ---------- Device management ---------- */
+.hl-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.hl-devices-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 28px; }
+.hl-devices-hero h2 { max-width: 700px; margin: 10px 0 0; line-height: 1.12; }
+.hl-devices-gradient { background: var(--hl-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.hl-devices-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hl-devices-actions .btn, .hl-devices-actions button { width: auto; display: inline-flex; align-items: center; gap: 8px; padding: .7rem 1rem; text-decoration: none; }
+.hl-devices-help { color: var(--text-muted); font-size: .82rem; line-height: 1.55; margin: 6px 0 0; }
+.hl-device-search { display: flex; align-items: center; gap: 10px; color: var(--text-muted); padding: 0 12px; border: 1px solid var(--hl-border); border-radius: 12px; background: var(--hl-input); min-width: 0; }
+.hl-device-search:focus-within { border-color: var(--hl-cyan); box-shadow: 0 0 0 3px rgba(34,211,238,.12); }
+.hl-device-search input { width: 100%; min-width: 0; padding: 10px 0; border: 0 !important; background: transparent !important; box-shadow: none !important; color: var(--text); }
+.device-toolbar > .hl-device-search { margin: 12px 0; max-width: 440px; }
+.hl-device-discovery { margin: 30px 0 20px; }
+.hl-discovery-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+.hl-discovery-heading h2 { margin: 9px 0 4px; font-size: 1.35rem; }
+.hl-discovery-heading p { max-width: 640px; color: var(--text-muted); margin: 0; font-size: .9rem; }
+.hl-discovery-summary { display: inline-flex; margin: 20px 0 14px; padding: 8px 12px; color: var(--hl-cyan); background: var(--hl-surface-2); border: 1px solid var(--hl-border); border-radius: 999px; font-size: .8rem; }
+.hl-discovery-toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.hl-discovery-toolbar .hl-device-search { flex: 1 1 240px; }
+.hl-discovery-toolbar select { min-width: 170px; color: var(--text); background: var(--hl-input); border: 1px solid var(--hl-border); border-radius: 12px; padding: 9px 12px; }
+.hl-device-row-action { min-width: 110px; padding: 7px 12px; font-size: .78rem; white-space: nowrap; }
+.hl-tv-dialog { width: min(460px, calc(100% - 32px)); padding: 28px; color: var(--text); background: var(--hl-surface-solid); border: 1px solid var(--hl-border-strong); border-radius: var(--radius-lg); box-shadow: var(--hl-shadow); }
+.hl-tv-dialog::backdrop { background: rgba(3, 6, 18, .72); backdrop-filter: blur(6px); }
+.hl-tv-dialog h2 { margin: 10px 0; font-size: 1.4rem; }
+.hl-tv-dialog p { color: var(--text-muted); line-height: 1.5; }
+.hl-tv-dialog label { display: block; margin: 18px 0 7px; }
+.hl-tv-dialog select, .hl-tv-dialog input { width: 100%; padding: 11px; color: var(--text); background: var(--hl-input); border: 1px solid var(--hl-border); border-radius: 12px; }
+.hl-tv-dialog .hl-devices-actions { margin-top: 20px; }
+.device-card { transition: transform .24s ease, box-shadow .24s ease, border-color .24s ease; }
+button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid var(--hl-cyan); outline-offset: 3px; }
+
 /* ---------- Mobile ---------- */
 @media (max-width: 768px) {
     .hl-kpis { grid-template-columns: repeat(2, 1fr); }
     .hl-hero { align-items: flex-start; }
     .ai-assistant input { width: 150px; }
+    .hl-devices-hero { align-items: flex-start; }
+    .hl-devices-hero h2 { font-size: 1.8rem; }
+    .hl-devices-actions { width: 100%; }
+    .hl-discovery-toolbar select { flex: 1 1 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

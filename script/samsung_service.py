@@ -48,7 +48,7 @@ def main():
         tokens = load_tokens()
         token = tokens.get(ip)
         
-        print(json.dumps({"status": "debug", "message": f"Token loaded for {ip}: {token}"}), flush=True)
+        print(json.dumps({"status": "debug", "message": f"Saved token available for {ip}: {bool(token)}"}), flush=True)
 
         # If we found a working port before, prioritize it
         ports = [8002, 8001]
@@ -68,7 +68,7 @@ def main():
                 tv = SamsungTVWS(host=ip, port=port, token=token, name='DelovaHome', timeout=t_out)
                 tv.open()
                 
-                print(json.dumps({"status": "debug", "message": f"Connected. Current token: {tv.token}"}), flush=True)
+                print(json.dumps({"status": "debug", "message": "Connected."}), flush=True)
 
                 if tv.token:
                     if tv.token != token:

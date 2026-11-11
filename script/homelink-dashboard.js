@@ -62,7 +62,7 @@
         var down = ov.networks.filter(function (n) { return n.status === 'offline'; }).length;
         var cls = 'ok', text = 'Alle systemen operationeel';
         if (ov.internet.online === false) { cls = 'bad'; text = 'Geen internetverbinding'; }
-        else if (down) { cls = 'warn'; text = down + (down === 1 ? ' netwerk' : ' netwerken') + ' offline'; }
+        else if (down) { cls = 'warn'; text = down + (down === 1 ? ' gateway reageert' : ' gateways reageren') + ' niet'; }
         pill.innerHTML = '<span class="hl-dot ' + cls + '"></span><span>' + text + '</span>';
     }
 
@@ -86,11 +86,11 @@
         all.sort(function (a, b) { return (b.d.online - a.d.online) || (b.d.isNew - a.d.isNew); });
         var rows = all.slice(0, 8).map(function (x) {
             var d = x.d;
-            return '<tr><td><strong>' + esc(d.name) + '</strong>' + (d.isNew ? ' <span class="hl-badge new">Nieuw</span>' : '') + (d.linked ? ' <span class="hl-badge vio">Gekoppeld</span>' : '') + '</td>' +
+            return '<tr><td><strong>' + esc(d.name) + '</strong>' + (d.isNew ? ' <span class="hl-badge new">Nieuw</span>' : '') + (d.linked ? ' <span class="hl-badge vio">Herkend</span>' : '') + '</td>' +
                 '<td class="hl-mono">' + esc(d.ip) + '</td>' +
                 '<td>' + esc(x.net.name) + '</td>' +
                 '<td class="hl-mono">' + (d.latency != null ? d.latency + ' ms' : '—') + '</td>' +
-                '<td><span class="hl-badge ' + (d.online ? 'ok' : 'bad') + '">' + (d.online ? 'Online' : 'Offline') + '</span></td></tr>';
+                '<td><span class="hl-badge ' + (d.online === true ? 'ok' : d.online === false ? 'bad' : '') + '">' + (d.online === true ? 'Bereikbaar' : d.online === false ? 'Offline' : 'Niet bevestigd') + '</span></td></tr>';
         }).join('');
         box.innerHTML = '<table class="hl-table"><thead><tr><th>Apparaat</th><th>IP</th><th>Netwerk</th><th>Latency</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table>' +
             (all.length > 8 ? '<div style="padding:10px 12px"><a class="hl-link" href="network.html">Alle ' + all.length + ' apparaten bekijken →</a></div>' : '');

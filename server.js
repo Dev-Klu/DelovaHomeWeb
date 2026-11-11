@@ -20,6 +20,8 @@ const bcrypt = require('bcrypt');
 // const sql = require('mssql'); // Removed to use db.sql
 const { exec } = require('child_process');
 const db = require('./script/db');
+const registerLocalUser = require('./script/registerLocalUser');
+const isPrivateStaticPath = require('./script/staticPrivacy');
 const nasManager = require('./script/nasManager');
 const cameraStreamManager = require('./script/cameraStream');
 const knxManager = require('./script/knxManager');
@@ -215,7 +217,10 @@ async function initUsersTable() {
                     PasswordHash NVARCHAR(255) NOT NULL,
                     Role NVARCHAR(50) DEFAULT 'User',
                     HubID NVARCHAR(255) NOT NULL,
-                    CreatedAt DATETIME DEFAULT GETDATE()
+                    CreatedAt DATETIME DEFAULT GETDATE(),
+                    SpotifyAccessToken NVARCHAR(512) NULL,
+                    SpotifyRefreshToken NVARCHAR(512) NULL,
+                    SpotifyTokenExpiration BIGINT NULL
                 )
             `);
             // Add unique constraint for Username + HubID
@@ -447,8 +452,16 @@ const requireAdmin = (req, res, next) => {
 
 app.use(authenticate);
 
-// Never serve the network inventory / config as static files
-app.use(/^\/data\/network/i, (req, res) => res.sendStatus(404));
+app.use((req, res, next) => {
+    let pathname;
+    try {
+        pathname = decodeURIComponent(req.path);
+    } catch (error) {
+        return res.sendStatus(400);
+    }
+    if (isPrivateStaticPath(pathname)) return res.sendStatus(404);
+    next();
+});
 
 // Serve static files from project root with caching strategy
 app.use(express.static(__dirname, {
@@ -559,25 +572,8 @@ app.post('/api/register', async (req, res) => {
 
   try {
     const pool = await db.getPool();
-    
-    // Check if user exists for this specific hub
-    const existsRes = await pool.request()
-        .input('username', db.sql.NVarChar(255), username)
-        .input('hubId', db.sql.NVarChar(255), hubConfig.hubId)
-        .query("SELECT COUNT(1) as cnt FROM Users WHERE Username = @username AND HubID = @hubId");
-    
-    if (existsRes.recordset[0].cnt > 0) {
-        return res.status(409).json({ ok: false, message: 'User already exists on this hub' });
-    }
-
     const passwordHash = await bcrypt.hash(password, 10);
-    
-    await pool.request()
-        .input('username', db.sql.NVarChar(255), username)
-        .input('passwordHash', db.sql.NVarChar(255), passwordHash)
-        .input('hubId', db.sql.NVarChar(255), hubConfig.hubId)
-        .query("INSERT INTO Users (Username, PasswordHash, HubID) VALUES (@username, @passwordHash, @hubId)");
-
+    await registerLocalUser(db, pool, { username, passwordHash, hubId: hubConfig.hubId });
     res.json({ ok: true, message: 'User created' });
   } catch (err) {
     // Catch unique constraint violation error
@@ -2046,6 +2042,30 @@ app.post('/api/ai/command', async (req, res) => {
 });
 
 // --- Network (HomeLink) API ---
+function registerManualTv(record) {
+    const protocols = { samsung: 'samsung-tizen', android: 'mdns-googlecast' };
+    const protocol = protocols[record.manualTv];
+    if (!protocol || require('net').isIP(record.ip) !== 4) {
+        throw new Error('Ongeldige opgeslagen tv-configuratie');
+    }
+    let device = deviceManager.getAllDevices().find(item => item.ip === record.ip);
+    if (device) {
+        device.type = 'tv';
+        device.protocol = protocol;
+        deviceManager.emit('device-updated', device);
+    } else {
+        const id = `manual-tv-${record.ip.replace(/\./g, '-')}`;
+        deviceManager.addDevice({
+            id, ip: record.ip, type: 'tv', protocol,
+            name: record.alias || record.hostname || `TV (${record.ip})`,
+            state: { on: false }
+        });
+        device = deviceManager.getDevice(id);
+    }
+    if (!device) throw new Error('Tv kon niet worden toegevoegd');
+    return device;
+}
+
 app.get('/api/network/overview', requireAuth, (req, res) => {
     res.json(networkManager.getOverview());
 });
@@ -2053,7 +2073,8 @@ app.get('/api/network/overview', requireAuth, (req, res) => {
 app.post('/api/network/scan', requireAdmin, (req, res) => {
     const { network } = req.body || {};
     if (network && !networkManager.networks[network]) return res.status(404).json({ ok: false, message: 'Unknown network' });
-    (network ? networkManager.scanNetwork(network) : networkManager.scanAll()).catch(() => {});
+    (network ? networkManager.scanNetwork(network) : networkManager.scanAll())
+        .catch(err => console.error('[Network] Scan failed:', err));
     res.json({ ok: true });
 });
 
@@ -2063,73 +2084,45 @@ app.post('/api/network/devices/rename', requireAdmin, (req, res) => {
     res.json({ ok: true });
 });
 
+app.post('/api/network/devices/tv', requireAdmin, (req, res) => {
+    const { ip, type } = req.body || {};
+    if (!['samsung', 'android'].includes(type)) {
+        return res.status(400).json({ ok: false, message: 'Kies een ondersteund tv-platform' });
+    }
+    if (typeof ip !== 'string' || require('net').isIP(ip) !== 4) {
+        return res.status(400).json({ ok: false, message: 'Ongeldig IP-adres' });
+    }
+    const network = Object.values(networkManager.networks).find(item =>
+        ip.startsWith(item.prefix) && Number(ip.split('.')[3]) > 0 && Number(ip.split('.')[3]) < 255);
+    if (!network) return res.status(400).json({ ok: false, message: 'IP-adres valt buiten de ingestelde netwerken' });
+    const existing = Object.entries(networkManager.inventory).find(([, item]) => item.network === network.id && item.ip === ip);
+    const key = existing ? existing[0] : `${network.id}:${ip}`;
+    const created = !existing;
+    const record = existing ? existing[1] : { ip, network: network.id, firstSeen: new Date().toISOString(), hostname: null, alias: null };
+    if (created) networkManager.inventory[key] = record;
+    const previous = record.manualTv;
+    record.manualTv = type;
+    if (!networkManager.saveInventory()) {
+        if (created) delete networkManager.inventory[key];
+        else record.manualTv = previous;
+        return res.status(500).json({ ok: false, message: 'Tv-configuratie kon niet worden opgeslagen' });
+    }
+    try {
+        const device = registerManualTv(record);
+        if (!network.devices.some(item => item.key === key)) network.devices.push(networkManager.inventoryDevice(key, record));
+        res.json({ ok: true, deviceId: device.id });
+    } catch (error) {
+        if (created) delete networkManager.inventory[key];
+        else record.manualTv = previous;
+        networkManager.saveInventory();
+        console.error('[Network] Failed to register TV:', error);
+        res.status(500).json({ ok: false, message: 'Tv kon niet worden toegevoegd' });
+    }
+});
+
 // --- Presence ---
 app.get('/api/presence', (req, res) => {
     res.json(presenceManager.getPresenceStatus());
-});
-
-// --- Floorplan API ---
-const FLOORPLAN_IMG = path.join(__dirname, 'img', 'floorplan.png');
-const FLOORPLAN_MARKERS = path.join(__dirname, 'data', 'floorplan_markers.json');
-
-app.get('/api/floorplan', (req, res) => {
-    const hasImage = fs.existsSync(FLOORPLAN_IMG);
-    let markers = [];
-    if (fs.existsSync(FLOORPLAN_MARKERS)) {
-        try { markers = JSON.parse(fs.readFileSync(FLOORPLAN_MARKERS)); } catch(e){}
-    }
-    res.json({
-        hasImage,
-        imageUrl: hasImage ? '../img/floorplan.png?t=' + Date.now() : null,
-        markers
-    });
-});
-
-app.post('/api/floorplan/upload', requireAdmin, (req, res) => {
-    console.log('[Floorplan] Upload received');
-    const { image } = req.body; // Base64 string "data:image/png;base64,..."
-    
-    if (!image) {
-        console.error('[Floorplan] No image in body');
-        return res.status(400).json({ error: 'No image provided in request body' });
-    }
-    
-    console.log(`[Floorplan] Image received (Length: ${image.length})`);
-
-    // Ensure img dir exists
-    const imgDir = path.dirname(FLOORPLAN_IMG);
-    if (!fs.existsSync(imgDir)) {
-        try {
-            fs.mkdirSync(imgDir, { recursive: true });
-        } catch (e) {
-            console.error('[Floorplan] Failed to create directory:', e);
-            return res.status(500).json({ error: 'Server filesystem error' });
-        }
-    }
-
-    const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-    fs.writeFile(FLOORPLAN_IMG, base64Data, 'base64', (err) => {
-        if (err) {
-            console.error('[Floorplan] Write failed:', err);
-            return res.status(500).json({ error: 'Write failed: ' + err.message });
-        }
-        console.log('[Floorplan] Upload successful');
-        res.json({ ok: true });
-    });
-});
-
-app.post('/api/floorplan/markers', requireAdmin, (req, res) => {
-    const { markers } = req.body;
-    if (!Array.isArray(markers)) return res.status(400).json({ error: 'Invalid markers' });
-    
-    // Ensure data dir exists
-    const dataDir = path.dirname(FLOORPLAN_MARKERS);
-    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
-    
-    fs.writeFile(FLOORPLAN_MARKERS, JSON.stringify(markers, null, 2), (err) => {
-         if (err) return res.status(500).json({ error: 'Write failed' });
-         res.json({ ok: true });
-    });
 });
 
 // --- Security API ---
@@ -2524,7 +2517,10 @@ const broadcast = (data) => {
 // Listen for pairing requests from DeviceManager
 deviceManager.on('pairing-required', (data) => {
     console.log(`[Server] Broadcasting pairing request for ${data.ip}`);
-    broadcast({ type: 'pairing-required', ...data });
+    broadcast({ ...data, deviceType: data.type, type: 'pairing-required' });
+});
+deviceManager.on('pairing-result', (data) => {
+    broadcast({ type: 'pairing-result', ...data });
 });
 
 // Listen for device updates and broadcast them
@@ -2717,8 +2713,8 @@ const handleUpgrade = (request, socket, head) => {
 let server;
 try {
     const httpsOptions = {
-        key: fs.readFileSync('server.key'),
-        cert: fs.readFileSync('server.cert')
+        key: fs.readFileSync(process.env.TLS_KEY_PATH || 'server.key'),
+        cert: fs.readFileSync(process.env.TLS_CERT_PATH || 'server.cert')
     };
     server = https.createServer(httpsOptions, app);
     server.listen(port, () => {
@@ -2734,6 +2730,10 @@ try {
     httpServer.on('upgrade', handleUpgrade);
 
 } catch (e) {
+    if (process.env.TLS_KEY_PATH || process.env.TLS_CERT_PATH) {
+        console.error('Configured TLS certificates could not be loaded:', e.message);
+        throw e;
+    }
     console.log('SSL certificates not found or invalid, falling back to HTTP');
     server = app.listen(port, () => console.log(`Server running at http://localhost:${port}`));
 }
@@ -3045,6 +3045,13 @@ udpServer.bind(8888, () => {
     networkManager.setProviders({
         devices: () => deviceManager.getAllDevices(),
         nas: () => nasManager.getNasList()
+    });
+    Object.values(networkManager.inventory).filter(record => record.manualTv).forEach(record => {
+        try {
+            registerManualTv(record);
+        } catch (error) {
+            console.error('[Network] Failed to restore TV:', error.message);
+        }
     });
     networkManager.start();
 

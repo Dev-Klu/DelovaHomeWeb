@@ -74,12 +74,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <label>Type</label>
                                 <select id="pair-type" class="modal-input" style="background: var(--bg); color: var(--text);">
                                     <option value="hue">Philips Hue Bridge</option>
-                                    <option value="sonos">Sonos Speaker</option>
                                     <option value="camera">IP Camera (RTSP)</option>
-                                    <option value="wled">WLED Strip</option>
-                                    <option value="shelly">Shelly Switch</option>
-                                    <option value="tasmota">Tasmota Device</option>
-                                    <option value="kodi">Kodi Media Center</option>
+                                    <option value="nas">NAS (SSH)</option>
+                                    <option value="pc">Computer (SSH)</option>
+                                    <option value="server">Server (SSH)</option>
                                 </select>
                             </div>
                         </div>
@@ -99,6 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <input type="text" id="pair-pin" class="modal-input" placeholder="1234">
                         </div>
 
+                        <p id="pairingStatus" role="status" aria-live="polite"></p>
                         <button class="btn btn-primary" style="width: 100%; margin-top: 20px;" onclick="submitPairing()">Verbinden</button>
                     </div>
                 </div>
@@ -329,7 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Fetch PS5 devices specifically
         const p2 = fetch('/api/ps5/devices').then(res => res.json()).catch(() => []);
 
-        Promise.all([p1, p2])
+        return Promise.all([p1, p2])
             .then(([devices, ps5Devices]) => {
                 // Merge PS5 devices into main list if not already present
                 ps5Devices.forEach(ps5 => {
@@ -346,6 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 allDevices = devices;
                 renderDevices(devices);
+                document.dispatchEvent(new Event('devices-list-updated'));
                 // If modal is open, refresh it
                 const modal = document.getElementById('deviceModal');
                 if (modal.style.display === 'block') {
@@ -359,6 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch(err => console.error('Error fetching devices:', err));
     }
+    window.refreshDeviceList = fetchDevices;
 
     function getDeviceCategory(device) {
         const type = (device.type || '').toLowerCase();
@@ -382,18 +383,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const chips = document.querySelectorAll('.device-filters .chip');
         chips.forEach(c => c.classList.toggle('active', c.getAttribute('data-category') === filter));
 
+        const search = document.getElementById('deviceSearch').value.trim().toLowerCase();
+        document.querySelectorAll('.device-card').forEach(card => {
+            const category = card.getAttribute('data-category') || 'other';
+            const matches = (card.dataset.search || '').includes(search);
+            card.style.display = (filter === 'all' || category === filter) && matches ? '' : 'none';
+        });
         const viewMode = getCurrentViewMode();
         if (viewMode === 'sections') {
             const sections = document.querySelectorAll('.device-section');
             sections.forEach(section => {
-                const category = section.getAttribute('data-category') || 'other';
-                section.style.display = (filter === 'all' || category === filter) ? '' : 'none';
-            });
-        } else {
-            const cards = grid.querySelectorAll('.device-card');
-            cards.forEach(card => {
-                const category = card.getAttribute('data-category') || 'other';
-                card.style.display = (filter === 'all' || category === filter) ? '' : 'none';
+                section.style.display = Array.from(section.querySelectorAll('.device-card')).some(card => card.style.display !== 'none') ? '' : 'none';
             });
         }
     }
@@ -437,6 +437,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setupDeviceFilters();
     setupDeviceViewToggle();
+    document.getElementById('deviceSearch').addEventListener('input', () => {
+        applyDeviceFilter(localStorage.getItem('devicesCategoryFilter') || 'all');
+    });
 
     function updateDeviceCard(device, container = grid) {
         let card = document.getElementById(`device-card-${device.id}`);
@@ -474,6 +477,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         card.setAttribute('data-category', category.id);
+        card.dataset.search = [device.name, device.type, device.ip, device.roomName, device.protocol].filter(Boolean).join(' ').toLowerCase();
 
         // Simple Card Content (Summary)
         let summary = '';
@@ -497,9 +501,9 @@ document.addEventListener('DOMContentLoaded', () => {
                  let parts = [];
                  if (device.state.health) {
                      if (typeof device.state.health === 'object' && device.state.health.status) {
-                         if (device.state.health.status !== 'ok') parts.push(device.state.health.status.toUpperCase());
+                         if (device.state.health.status !== 'ok') parts.push(HL.esc(device.state.health.status.toUpperCase()));
                      } else if (typeof device.state.health === 'string' && device.state.health !== 'ok') {
-                         parts.push(device.state.health.toUpperCase());
+                         parts.push(HL.esc(device.state.health.toUpperCase()));
                      }
                  }
                  if (device.state.cpu !== undefined) parts.push(`CPU: ${Math.round(device.state.cpu)}%`);
@@ -508,9 +512,9 @@ document.addEventListener('DOMContentLoaded', () => {
                  else summary = 'Online';
             }
             else if ((type === 'tv' || type === 'speaker' || type === 'receiver' || hasMediaProtocol) && device.state.mediaTitle) {
-                summary = `<span style="font-size: 0.9em; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;">${device.state.mediaTitle}</span>`;
+                summary = `<span style="font-size: 0.9em; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;">${HL.esc(device.state.mediaTitle)}</span>`;
                 if (device.state.mediaArtist) {
-                    summary += `<span style="font-size: 0.8em; color: #aaa; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;">${device.state.mediaArtist}</span>`;
+                    summary += `<span style="font-size: 0.8em; color: #aaa; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;">${HL.esc(device.state.mediaArtist)}</span>`;
                 }
                 if (sensorInfo) summary += `<span style="font-size: 0.8em; opacity: 0.8; display: block; margin-top: 2px;">${sensorInfo}</span>`;
             }
@@ -535,15 +539,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="device-status-indicator ${statusClass}"></div>
                 </div>
                 <div class="device-card-middle">
-                    <span class="device-category-badge">${categoryLabel}</span>
-                    <h3 class="device-name">${device.name}</h3>
+                    <span class="device-category-badge">${HL.esc(categoryLabel)}</span>
+                    <h3 class="device-name">${HL.esc(device.name)}</h3>
                     <p class="device-status-text">${summary}</p>
                 </div>
                 <div class="device-card-bottom">
-                    <button class="btn-icon-only" onclick="showDeviceMenu('${device.id}', event); event.stopPropagation();" title="Meer opties">
+                    <button class="btn-icon-only" title="Meer opties">
                         <i class="fas fa-ellipsis-h"></i>
                     </button>
-                    <button class="btn-power ${isOn ? 'active' : ''}" onclick="toggleDevice('${device.id}'); event.stopPropagation();">
+                    <button class="btn-power ${isOn ? 'active' : ''}" aria-label="Apparaat schakelen">
                         <i class="fas fa-power-off"></i>
                     </button>
                 </div>
@@ -553,6 +557,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Only update DOM if content changed to prevent flickering
         if (card.innerHTML !== newHtml) {
             card.innerHTML = newHtml;
+            card.querySelector('.btn-icon-only').addEventListener('click', event => {
+                event.stopPropagation();
+                showDeviceMenu(device.id, event);
+            });
+            card.querySelector('.btn-power').addEventListener('click', event => {
+                event.stopPropagation();
+                toggleDevice(device.id);
+            });
         }
     }
 
@@ -572,6 +584,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderDevices(allDevices);
         } else {
             updateDeviceCard(updatedDevice, grid);
+            applyDeviceFilter(localStorage.getItem('devicesCategoryFilter') || 'all');
         }
 
         // If modal is open for this device, update it
@@ -978,6 +991,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (device.protocol === 'samsung-tizen' || device.name.toLowerCase().includes('samsung')) {
                 controlsHtml += `
                     <div style="margin-top: 15px; width: 100%; display: flex; justify-content: center;">
+                        <button class="btn btn-secondary" onclick="showPairingModal('${device.id}')">
+                            <i class="fas fa-link"></i> Koppelen
+                        </button>
                         <button class="btn btn-secondary" style="background-color: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 4px; display: flex; align-items: center; gap: 8px;" onclick="if(confirm(window.t ? window.t('confirm_start_samsung_pair') : 'Start pairing process for this Samsung TV? You may need to accept a popup on the TV.')) controlDevice('${device.id}', 'repair')">
                             <i class="fas fa-link"></i> Re-pair Connection
                         </button>
@@ -1577,16 +1593,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     window.startPairing = (ip, name) => {
-        showPairingModal(ip, name);
-        
-        // Also trigger the pairing request on the backend
         const device = allDevices.find(d => d.ip === ip);
         if (device) {
+            showPairingModal(device.id);
             fetch(`/api/devices/${device.id}/command`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ command: 'start_pairing' })
-            }).catch(e => console.error('Failed to start pairing:', e));
+            }).then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            }).catch(e => {
+                console.error('Failed to start pairing:', e);
+                document.getElementById('pairingStatus').textContent = `Koppeling starten mislukt: ${e.message}`;
+            });
+        } else {
+            alert('Apparaat niet gevonden. Start eerst een scan.');
         }
     };
 
@@ -1967,6 +1988,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (window.showPairingModal) {
                     window.showPairingModal(msg.ip, msg.name, 'tv');
                 }
+            } else if (msg.type === 'pairing-result' && currentPairingDevice && currentPairingDevice.ip === msg.ip) {
+                const status = document.getElementById('pairingStatus');
+                if (msg.status === 'waiting_for_pin') status.textContent = 'Voer de code in die op de tv verschijnt.';
+                if (msg.status === 'paired') status.textContent = 'Tv gekoppeld. De verbinding wordt gestart.';
+                if (msg.status === 'pairing_failed') status.textContent = `Koppelen mislukt: ${msg.error || 'onbekende fout'}`;
             }
         } catch (e) {
             console.error('WebSocket error:', e);
@@ -2125,10 +2151,10 @@ window.unpairDevice = async (deviceId) => {
 
 window.showPairingModal = (arg1, arg2) => {
     try {
-        let device = allDevices.find(d => d.id === arg1);
+        let device = allDevices.find(d => d.id === arg1 || d.ip === arg1);
         
         if (device) {
-            currentPairingDevice = { ip: device.ip, name: device.name, type: device.type };
+            currentPairingDevice = { ip: device.ip, name: device.name, type: device.type, protocol: device.protocol };
         } else {
             // Fallback: Check if arg1 is an IP or if arg2 is provided (legacy call)
             if (arg1 && arg1.includes('.')) {
@@ -2156,6 +2182,10 @@ window.showPairingModal = (arg1, arg2) => {
         }
         const title = document.getElementById('pairingTitle');
         const desc = document.getElementById('pairingDesc');
+        document.getElementById('manual-pair-fields').style.display = 'none';
+        document.getElementById('pairingStatus').textContent = '';
+        document.querySelector('#pairingModal .btn-primary').textContent = 'Verbinden';
+        document.querySelector('#pairingModal .btn-primary').disabled = false;
         
         title.textContent = `Koppelen met ${name}`;
         desc.textContent = `Voer gegevens in voor ${type ? type.toUpperCase() : 'apparaat'} (${ip})`;
@@ -2169,11 +2199,22 @@ window.showPairingModal = (arg1, arg2) => {
         const passGroup = document.getElementById('pair-password').closest('.control-group');
         const pinGroup = document.getElementById('pair-pin-group');
         
-        if (type === 'tv' || type === 'samsung' || type === 'lg') {
+        if (currentPairingDevice.protocol === 'samsung-tizen') {
+            if (userGroup) userGroup.style.display = 'none';
+            if (passGroup) passGroup.style.display = 'none';
+            if (pinGroup) pinGroup.style.display = 'none';
+            desc.textContent = 'Start de verbinding en accepteer het verzoek op je Samsung-tv.';
+        } else if (currentPairingDevice.protocol === 'mdns-googlecast') {
             if (userGroup) userGroup.style.display = 'none';
             if (passGroup) passGroup.style.display = 'none';
             if (pinGroup) pinGroup.style.display = 'block';
-            desc.textContent = `Voer de PIN code in die op ${name || 'je TV'} verschijnt:`;
+            desc.textContent = `Voer de code in die op ${name || 'je tv'} verschijnt.`;
+        } else if (type === 'tv' || type === 'samsung' || type === 'lg') {
+            if (userGroup) userGroup.style.display = 'none';
+            if (passGroup) passGroup.style.display = 'none';
+            if (pinGroup) pinGroup.style.display = 'none';
+            desc.textContent = 'Voor dit tv-protocol is koppeling via dit scherm niet beschikbaar.';
+            document.querySelector('#pairingModal .btn-primary').disabled = true;
         } else {
             if (userGroup) userGroup.style.display = 'block';
             if (passGroup) passGroup.style.display = 'block';
@@ -2182,7 +2223,7 @@ window.showPairingModal = (arg1, arg2) => {
         
         modal.style.display = 'flex';
         
-        if (type === 'tv' || type === 'samsung' || type === 'lg') {
+        if (currentPairingDevice.protocol === 'mdns-googlecast') {
             const pinInput = document.getElementById('pair-pin');
             if (pinInput) pinInput.focus();
         } else {
@@ -2201,7 +2242,7 @@ window.closeManualPairing = () => {
     document.body.style.overflow = '';
 };
 
-window.openManualPairing = () => {
+window.openManualPairing = (ip = '') => {
     currentPairingDevice = null;
     document.getElementById('pairingModal').style.display = 'block';
     document.body.style.overflow = 'hidden';
@@ -2210,9 +2251,14 @@ window.openManualPairing = () => {
     
     // Show manual fields
     document.getElementById('manual-pair-fields').style.display = 'block';
-    document.getElementById('pair-ip').value = '';
+    document.getElementById('pair-ip').value = ip;
     document.getElementById('pair-username').value = '';
     document.getElementById('pair-password').value = '';
+    document.getElementById('pair-pin').value = '';
+    document.getElementById('pairingStatus').textContent = '';
+    document.getElementById('pair-username').closest('.control-group').style.display = 'block';
+    document.getElementById('pair-password').closest('.control-group').style.display = 'block';
+    document.getElementById('pair-pin-group').style.display = 'none';
     
     const btn = document.querySelector('#pairingModal .btn-primary');
     btn.textContent = 'Toevoegen';
@@ -2239,15 +2285,18 @@ window.submitPairing = async () => {
 
     const btn = document.querySelector('#pairingModal .btn-primary');
     const originalText = btn.textContent;
+    const status = document.getElementById('pairingStatus');
+    status.textContent = '';
     btn.textContent = 'Verbinden...';
     btn.disabled = true;
 
     try {
         let res;
 
-        if (currentPairingDevice && (type === 'tv' || type === 'samsung' || type === 'lg')) {
+        if (currentPairingDevice && ['samsung-tizen', 'mdns-googlecast'].includes(currentPairingDevice.protocol)) {
             const device = allDevices.find(d => d.ip === ip);
             if (!device) throw new Error('Apparaat niet gevonden in lijst.');
+            if (currentPairingDevice.protocol === 'mdns-googlecast' && !pin.trim()) throw new Error('Vul de code op je tv in.');
 
             res = await fetch(`/api/devices/${device.id}/command`, {
                 method: 'POST',
@@ -2265,14 +2314,19 @@ window.submitPairing = async () => {
         const data = await res.json();
 
         if (data.ok) {
-            alert(window.t ? window.t('pairing_successful') : 'Succesvol gekoppeld!');
-            document.getElementById('pairingModal').style.display = 'none';
-            if (typeof fetchDevices === 'function') fetchDevices();
+            if (currentPairingDevice && ['samsung-tizen', 'mdns-googlecast'].includes(currentPairingDevice.protocol)) {
+                status.textContent = currentPairingDevice.protocol === 'samsung-tizen'
+                    ? 'Verbindingsverzoek gestart. Bevestig dit op je tv.'
+                    : 'Code verzonden. Controleer op je tv of de koppeling is gelukt.';
+            } else {
+                status.textContent = 'Gegevens opgeslagen. Controleer de verbinding bij het apparaat.';
+            }
+            if (window.refreshDeviceList) window.refreshDeviceList();
         } else {
-            alert((window.t ? window.t('pairing_failed') : 'Koppelen mislukt: ') + (data.error || data.message || 'Onbekende fout'));
+            status.textContent = 'Koppelen mislukt: ' + (data.error || data.message || 'Onbekende fout');
         }
     } catch (e) {
-        alert((window.t ? window.t('error') : 'Fout') + ': ' + e.message);
+        status.textContent = 'Koppelen mislukt: ' + e.message;
     } finally {
         btn.textContent = originalText;
         btn.disabled = false;

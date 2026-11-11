@@ -8,7 +8,7 @@
             var cls = n.status === 'online' ? 'ok' : n.status === 'offline' ? 'bad' : '';
             return '<article class="hl-panel hl-rise" style="--i:' + (i + 2) + '">' +
                 '<div class="hl-panel-head"><h3 class="hl-panel-title"><i class="fas ' + (n.id === 'starlink' ? 'fa-satellite-dish' : 'fa-ethernet') + '"></i> ' + esc(n.name) + ' · ' + esc(n.location) + '</h3>' +
-                '<span class="hl-pill"><span class="hl-dot ' + cls + '"></span>' + (n.status === 'online' ? 'Online' : n.status === 'offline' ? 'Offline' : '…') + '</span></div>' +
+                '<span class="hl-pill"><span class="hl-dot ' + cls + '"></span>' + (n.status === 'online' ? 'Gateway bereikbaar' : n.status === 'offline' ? 'Gateway reageert niet' : 'Gateway controleren…') + '</span></div>' +
                 '<div class="hl-row-sub" style="margin-bottom:8px">' + esc(n.cidr) + ' · gateway ' + esc(n.gateway) + '</div>' +
                 HL.spark(n.history) +
                 '<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:.82rem;color:var(--text-muted)">' +
@@ -40,10 +40,10 @@
             rows.map(function (x) {
                 var d = x.d;
                 return '<tr><td><a href="#" data-rename="' + esc(d.key) + '" data-name="' + esc(d.name) + '" title="Klik om te hernoemen"><strong>' + esc(d.name) + '</strong></a>' +
-                    (d.isGateway ? ' <span class="hl-badge">gateway</span>' : '') + (d.isNew ? ' <span class="hl-badge new">Nieuw</span>' : '') + (d.linked ? ' <span class="hl-badge vio">Gekoppeld</span>' : '') + '</td>' +
+                    (d.isGateway ? ' <span class="hl-badge">gateway</span>' : '') + (d.isNew ? ' <span class="hl-badge new">Nieuw</span>' : '') + (d.linked ? ' <span class="hl-badge vio">Herkend</span>' : '') + '</td>' +
                     '<td class="hl-mono">' + esc(d.ip) + '</td><td class="hl-mono">' + esc(d.mac || '—') + '</td><td>' + esc(d.vendor || '—') + '</td>' +
                     '<td>' + esc(x.n.name) + '</td><td class="hl-mono">' + (d.latency != null ? d.latency + ' ms' : '—') + '</td>' +
-                    '<td><span class="hl-badge ' + (d.online ? 'ok' : 'bad') + '">' + (d.online ? 'Online' : 'Offline · ' + HL.ago(d.lastSeen)) + '</span></td></tr>';
+                    '<td><span class="hl-badge ' + (d.online === true ? 'ok' : d.online === false ? 'bad' : '') + '">' + (d.online === true ? 'Bereikbaar' : d.online === false ? 'Offline' : 'Niet bevestigd') + (d.lastSeen && d.online !== true ? ' · ' + HL.ago(d.lastSeen) : '') + '</span></td></tr>';
             }).join('') + '</tbody></table>';
     }
 
@@ -51,7 +51,7 @@
         var ts = ov.tailscale;
         $('nwTailnet').textContent = ts.tailnet || '';
         if (!ts.installed) {
-            $('nwTailscale').innerHTML = '<div class="hl-empty">Tailscale CLI niet gevonden. Installeer Tailscale op de HomeLink-server en voer <span class="hl-mono">tailscale up --advertise-routes=192.168.10.0/24,192.168.0.0/24</span> uit om beide netwerken op afstand te bereiken.</div>';
+            $('nwTailscale').innerHTML = '<div class="hl-empty">Tailscale CLI niet gevonden. Installeer en activeer Tailscale op de server. De subnetrouter moet het externe subnet aankondigen; keur de route goed en accepteer routes op deze server.</div>';
             return;
         }
         var nodes = (ts.self ? [ts.self] : []).concat(ts.peers);

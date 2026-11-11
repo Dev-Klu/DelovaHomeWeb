@@ -51,6 +51,7 @@ class AndroidTVManager:
         self.ip = ip
         self.remote = None
         self.protocol = None
+        self.pairing_lock = asyncio.Lock()
         self.cert_path, self.key_path = ensure_certificates()
 
     async def connect(self):
@@ -105,23 +106,26 @@ class AndroidTVManager:
 
     async def pair(self):
         """Pair with the Android TV (AndroidTVRemote2 only)."""
-        try:
-            await self.remote.async_start_pairing()
-            print(json.dumps({"status": "waiting_for_pin"}), flush=True)
-            
-            self.pin_future = asyncio.get_running_loop().create_future()
-            pin = await self.pin_future
-            
-            await self.remote.async_finish_pairing(pin)
-            print(json.dumps({"status": "paired"}), flush=True)
-            
-            print(json.dumps({"status": "debug", "message": "Re-connecting after pairing..."}), flush=True)
-            await self.remote.async_connect()
-            self.protocol = 'androidtvremote2'
-            print(json.dumps({"status": "connected"}), flush=True)
-            
-        except Exception as e:
-            print(json.dumps({"status": "pairing_failed", "error": str(e)}), flush=True)
+        if self.pairing_lock.locked():
+            return
+        async with self.pairing_lock:
+            try:
+                if not isinstance(self.remote, AndroidTVRemote):
+                    self.remote = AndroidTVRemote(
+                        client_name="DelovaHome", certfile=self.cert_path,
+                        keyfile=self.key_path, host=self.ip
+                    )
+                await self.remote.async_start_pairing()
+                self.pin_future = asyncio.get_running_loop().create_future()
+                print(json.dumps({"status": "waiting_for_pin"}), flush=True)
+                pin = await self.pin_future
+                await self.remote.async_finish_pairing(pin)
+                print(json.dumps({"status": "paired"}), flush=True)
+                await self.remote.async_connect()
+                self.protocol = 'androidtvremote2'
+                print(json.dumps({"status": "connected"}), flush=True)
+            except Exception as e:
+                print(json.dumps({"status": "pairing_failed", "error": str(e)}), flush=True)
 
     async def handle_pin_input(self, pin):
         """Handle PIN input from stdin."""
@@ -220,8 +224,6 @@ async def main():
                 print(json.dumps({"status": "debug", "message": "Stdin closed"}), flush=True)
                 break
             
-            print(json.dumps({"status": "debug", "message": f"Received line: {line.strip()}"}), flush=True)
-
             # Check if this is a PIN for pairing
             try:
                 data = json.loads(line)

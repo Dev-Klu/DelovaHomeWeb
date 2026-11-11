@@ -342,7 +342,6 @@ document.addEventListener('DOMContentLoaded', () => {
             { key: 'rooms', name: 'Kamers', icon: 'fas fa-door-open', href: 'rooms.html' },
             { key: 'devices', name: 'Apparaten', icon: 'fas fa-laptop-house', href: 'devices.html' },
             { key: 'network', name: 'Netwerk', icon: 'fas fa-network-wired', href: 'network.html' },
-            { key: 'floorplan', name: 'Floorplan', icon: 'fas fa-map-marked-alt', href: 'floorplan.html' },
             { key: 'energy', name: 'Energy', icon: 'fas fa-bolt', href: 'energy.html' },
             { key: 'automations', name: 'Automatiseringen', icon: 'fas fa-magic', href: 'automations.html' },
             { key: 'settings', name: 'Instellingen', icon: 'fas fa-cog', href: 'settings.html' }

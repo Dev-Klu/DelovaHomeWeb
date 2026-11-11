@@ -2699,6 +2699,8 @@ class DeviceManager extends EventEmitter {
                     } else if (msg.status === 'pairing_required') {
                         console.log(`[Android TV Service] Pairing required for ${ip}. Please check TV for code.`);
                         this.emit('pairing-required', { ip: ip, name: 'Android TV', type: 'android-tv' });
+                    } else if (msg.status === 'waiting_for_pin' || msg.status === 'paired' || msg.status === 'pairing_failed') {
+                        this.emit('pairing-result', { ip, status: msg.status, error: msg.error });
                     } else if (msg.status === 'connected' || msg.status === 'paired') {
                         console.log(`[Android TV Service] Connected to ${ip}`);
                         const device = Array.from(this.devices.values()).find(d => d.ip === ip);
@@ -3008,6 +3010,11 @@ class DeviceManager extends EventEmitter {
     async handleSamsungCommand(device, command, value) {
         console.log(`[Samsung] Handling command '${command}' for ${device.name}`);
 
+        if (command === 'pair') {
+            this.getSamsungProcess(device.ip);
+            return;
+        }
+
         if (command === 'repair') {
             console.log(`[Samsung] Repair requested for ${device.name} (${device.ip}). Clearing credentials...`);
             
@@ -3036,11 +3043,8 @@ class DeviceManager extends EventEmitter {
                 } catch(e) { console.error('Failed to clear token file:', e); }
             }
 
-            // Start a connection attempt immediately by sending a dummy key
-            // This triggers the Python script which will see no token and ask for one
-            setTimeout(() => {
-                this.handleSamsungCommand(device, 'toggle', null); 
-            }, 1000);
+            // Reconnect to prompt for approval without sending a power command.
+            setTimeout(() => this.getSamsungProcess(device.ip), 1000);
             return;
         }
 
